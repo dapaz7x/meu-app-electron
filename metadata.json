@@ -1,0 +1,8 @@
+
+{
+  "name": "Gestor de Chapa - Padaria Araújo",
+  "description": "Sistema de gestão de pedidos interno para área de chapa, otimizado para toque e leitor de código de barras.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
