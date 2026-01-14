@@ -1,22 +1,43 @@
 {
   "name": "gestor-de-chapa---padaria-araújo",
   "private": true,
-  "version": "0.0.0",
-  "type": "module",
+  "version": "1.0.0",
+  "main": "main.js",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "electron:build": "npm run build && electron-builder"
   },
   "dependencies": {
+    "electron-updater": "^6.7.3",
     "react": "^19.2.3",
-    "recharts": "^3.6.0",
-    "react-dom": "^19.2.3"
+    "react-dom": "^19.2.3",
+    "recharts": "^3.6.0"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "electron": "^39.2.7",
+    "electron-builder": "^26.4.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
+  },
+  "build": {
+    "appId": "com.renan.gestorchapa",
+    "productName": "Gestor de Chapa",
+    "directories": {
+      "output": "release"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Renan-Douglas",
+        "repo": "meu-app-electron"
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    }
   }
 }
