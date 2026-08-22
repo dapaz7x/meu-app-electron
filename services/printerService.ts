@@ -11,9 +11,9 @@ class PrinterService {
     const printContent = `
       <div class="thermal-print">
         <center>
-          <div style="background: black; color: white; padding: 10px; margin-bottom: 5px;">
+          <div style="background: black; color: white; padding: 2px; margin-bottom: 5px;">
             <h1 style="font-size: 32pt; margin: 0;">COMANDA: ${order.comanda}</h1>
-            ${isMerge ? '<h2 style="font-size: 14pt; margin: 0; background: white; color: black;">ADICIONAL / ALTERAÇÃO</h2>' : ''}
+            ${isMerge ? '<h2 style="font-size: 6pt; margin: 0; background: white; color: black;">ADICIONAL / ALTERAÇÃO</h2>' : ''}
           </div>
           <p style="margin: 5px 0; font-size: 14pt;">DATA: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</p>
         </center>
@@ -21,7 +21,7 @@ class PrinterService {
         <hr style="border: 2px dashed black; margin: 10px 0;">
         
         ${order.entries.map((entry, eIdx) => `
-          <div style="margin-bottom: 20px; border: ${entry.quantity > 1 ? '3px solid black' : 'none'}; padding: ${entry.quantity > 1 ? '5px' : '0'};">
+          <div style="margin-bottom: 6px; border: ${entry.quantity > 1 ? '3px solid black' : 'none'}; padding: ${entry.quantity > 1 ? '5px' : '0'};">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <h2 style="font-size: 22pt; margin: 0; text-transform: uppercase;">${entry.item.name}</h2>
               <div style="font-size: 28pt; font-weight: 900; background: ${entry.quantity > 1 ? 'black' : 'transparent'}; color: ${entry.quantity > 1 ? 'white' : 'black'}; padding: 2px 10px;">${entry.quantity}x</div>
