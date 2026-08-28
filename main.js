@@ -27,10 +27,14 @@ function createWindow() {
   win.loadFile(path.join(__dirname, "dist/index.html"));
 }
 
-ipcMain.handle("print-receipt", async (event, requestedPrinterName) => {
+ipcMain.handle("print-receipt", async (event, payload) => {
+  let printWindow;
   try {
-    const webContents = event.sender;
-    const printers = await webContents.getPrintersAsync();
+    const requestedPrinterName = String(payload?.printerName || "");
+    const receiptHtml = String(payload?.html || "");
+    if (!receiptHtml) throw new Error("Conteúdo da comanda não foi recebido.");
+
+    const printers = await event.sender.getPrintersAsync();
     const normalizedName = String(requestedPrinterName || "").trim().toLowerCase();
     writePrintLog(`Pedido de impressão. Nome configurado: ${requestedPrinterName || "(vazio)"}`);
     writePrintLog(`Impressoras do Windows: ${printers.map(p => `${p.name} (${p.displayName || "sem nome de exibição"})`).join(" | ")}`);
@@ -48,12 +52,40 @@ ipcMain.handle("print-receipt", async (event, requestedPrinterName) => {
     }
 
     writePrintLog(`Impressora selecionada: ${printer.name}`);
+    printWindow = new BrowserWindow({
+      show: false,
+      width: 303,
+      height: 1123,
+      webPreferences: {
+        backgroundThrottling: false,
+        contextIsolation: true,
+        nodeIntegration: false
+      }
+    });
+
+    const printDocument = `<!doctype html>
+      <html><head><meta charset="utf-8"><style>
+        @page { margin: 0; }
+        html, body { margin: 0; padding: 0; width: 72.1mm; background: white; }
+        .thermal-print {
+          width: 72.1mm; padding: 2mm; margin: 0; box-sizing: border-box;
+          overflow: hidden; font-family: "Courier New", monospace;
+          font-size: 14pt; line-height: 1.2; background: white; color: black;
+        }
+      </style></head><body>${receiptHtml}</body></html>`;
+
+    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(printDocument)}`);
+    writePrintLog("Janela exclusiva de impressão carregada com o tamanho de 80 mm.");
+
     await new Promise((resolve, reject) => {
-      webContents.print({
+      printWindow.webContents.print({
         silent: true,
         printBackground: true,
         deviceName: printer.name,
-        margins: { marginType: "none" }
+        usePrinterDefaultPageSize: true,
+        margins: { marginType: "none" },
+        landscape: false,
+        scaleFactor: 100
       }, (success, failureReason) => {
         if (success) {
           writePrintLog("Pedido aceito pela fila de impressão.");
@@ -67,6 +99,8 @@ ipcMain.handle("print-receipt", async (event, requestedPrinterName) => {
   } catch (error) {
     writePrintLog(`ERRO: ${error instanceof Error ? error.stack || error.message : String(error)}`);
     throw error;
+  } finally {
+    if (printWindow && !printWindow.isDestroyed()) printWindow.destroy();
   }
 });
 

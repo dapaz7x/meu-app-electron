@@ -1,7 +1,7 @@
 {
   "name": "gestor-de-chapa-padaria-araujo",
   "private": true,
-  "version": "1.0.11",
+  "version": "1.0.12",
   "main": "main.js",
   "scripts": {
     "dev": "vite",
