@@ -7,6 +7,14 @@ class PrinterService {
    */
   static printOrder(order: Order, config: PrinterConfig, isMerge: boolean = false) {
     console.log(`Printing to local Windows queue ${config.name}...`);
+    const printedAt = new Date();
+    const formattedDateTime = printedAt.toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
     
     const printContent = `
       <div class="thermal-print">
@@ -16,7 +24,7 @@ class PrinterService {
             <div style="font-size: 40pt; font-weight: 900; line-height: 1;">${order.comanda}</div>
             ${isMerge ? '<h2 style="font-size: 10pt; margin: 3px 0 0; border-top: 2px solid black;">ADICIONAL / ALTERAÇÃO</h2>' : ''}
           </div>
-          <p style="margin: 5px 0; font-size: 14pt;">DATA: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</p>
+          <p style="margin: 8px 0 12px; font-size: 15pt; font-weight: 900;">${formattedDateTime}</p>
         </center>
         
         <hr style="border: 2px dashed black; margin: 10px 0;">
@@ -52,16 +60,15 @@ class PrinterService {
           <hr style="border: 1px solid black; margin: 10px 0;">
         `).join('')}
         
-        <div style="margin-top: 30px;">
+        <div style="margin-top: 45px; min-height: 35mm;">
           <center>
             <p style="font-size: 10pt; font-weight: bold;">PADARIA ARAÚJO - SETOR CHAPA</p>
-            <p style="font-size: 8pt;">${new Date().toLocaleString()}</p>
           </center>
         </div>
       </div>
     `;
 
-    const rawData = this.buildEscPosReceipt(order, isMerge);
+    const rawData = this.buildEscPosReceipt(order, isMerge, formattedDateTime);
     this.executeBrowserPrint(printContent, rawData, config);
   }
 
@@ -104,11 +111,13 @@ class PrinterService {
     return btoa(binary);
   }
 
-  private static buildEscPosReceipt(order: Order, isMerge: boolean) {
+  private static buildEscPosReceipt(order: Order, isMerge: boolean, formattedDateTime: string) {
     const ESC = 0x1b;
     const GS = 0x1d;
+    let bodyLines = 0;
     const chunks: Array<number[] | string> = [
       [ESC, 0x40],
+      [ESC, 0x33, 0x24],
       [ESC, 0x61, 0x01],
       [ESC, 0x45, 0x01],
       [GS, 0x21, 0x11],
@@ -118,7 +127,12 @@ class PrinterService {
       [GS, 0x21, 0x00],
       [ESC, 0x45, 0x00],
       isMerge ? 'ADICIONAL / ALTERACAO\n' : '',
-      `${new Date().toLocaleString('pt-BR')}\n`,
+      [ESC, 0x45, 0x01],
+      [GS, 0x21, 0x01],
+      `${formattedDateTime}\n`,
+      [GS, 0x21, 0x00],
+      [ESC, 0x45, 0x00],
+      '\n',
       '------------------------------------------\n',
       [ESC, 0x61, 0x00]
     ];
@@ -127,27 +141,41 @@ class PrinterService {
       chunks.push([ESC, 0x45, 0x01], [GS, 0x21, 0x11]);
       chunks.push(`${entry.quantity}X ${entry.item.name.toUpperCase()}\n`);
       chunks.push([GS, 0x21, 0x00], [ESC, 0x45, 0x00]);
+      chunks.push('\n');
+      bodyLines += 3;
 
       entry.configs.forEach((cfg, index) => {
-        if (entry.quantity > 1) chunks.push(`[ITEM ${index + 1}]\n`);
-        if (cfg.cheese) chunks.push(`QUEIJO: ${cfg.cheese.toUpperCase()}\n`);
+        if (entry.quantity > 1) {
+          chunks.push(`[ITEM ${index + 1}]\n`);
+          bodyLines += 1;
+        }
+        if (cfg.cheese) {
+          chunks.push(`QUEIJO: ${cfg.cheese.toUpperCase()}\n`);
+          bodyLines += 1;
+        }
         if (cfg.selectedAddOns.length) {
           chunks.push([ESC, 0x45, 0x01], 'ADICIONAIS:\n', [ESC, 0x45, 0x00]);
           cfg.selectedAddOns.forEach(addOn => chunks.push(`- ${addOn.name.toUpperCase()}\n`));
+          bodyLines += 1 + cfg.selectedAddOns.length;
         }
         if (cfg.observation) {
-          chunks.push([ESC, 0x45, 0x01], `OBS: ${cfg.observation.toUpperCase()}\n`, [ESC, 0x45, 0x00]);
+          chunks.push('\n', [ESC, 0x45, 0x01], `OBS: ${cfg.observation.toUpperCase()}\n`, [ESC, 0x45, 0x00]);
+          bodyLines += 2;
         }
       });
-      chunks.push('------------------------------------------\n');
+      chunks.push('\n', '------------------------------------------\n');
+      bodyLines += 2;
     });
 
+    const minimumBodyLines = 12;
+    const footerSpacing = Math.max(4, minimumBodyLines - bodyLines);
     chunks.push(
+      [ESC, 0x64, footerSpacing],
       [ESC, 0x61, 0x01],
       [ESC, 0x45, 0x01],
       'PADARIA ARAUJO - SETOR CHAPA\n',
       [ESC, 0x45, 0x00],
-      `${new Date().toLocaleString('pt-BR')}\n`,
+      [ESC, 0x32],
       [ESC, 0x64, 0x04],
       [GS, 0x56, 0x00]
     );
