@@ -178,22 +178,22 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }
 
         {step === 'OBS' && (
           <div className="max-w-4xl mx-auto flex flex-col h-full">
-            <h2 className="text-4xl font-black mb-10 uppercase text-slate-900">
+            <h2 className="text-4xl font-black mb-4 uppercase text-slate-900">
                Observações {quantity > 1 ? `(Unidade ${currentUnitIndex + 1})` : ''}
             </h2>
             <textarea
               value={observation}
               onChange={(e) => setObservation(e.target.value)}
               placeholder="Ex: Sem cebola, bem passado..."
-              className="flex-1 w-full p-10 text-3xl border-4 border-slate-50 rounded-3xl focus:outline-none focus:border-[#E53935] min-h-[400px] shadow-inner bg-slate-50 uppercase font-bold"
+              className="w-full h-48 min-h-48 max-h-48 resize-none p-6 text-3xl border-4 border-slate-50 rounded-3xl focus:outline-none focus:border-[#E53935] shadow-inner bg-slate-50 uppercase font-bold"
             />
             
-            <div className="mt-10 flex flex-wrap gap-3">
-                {['SEM CEBOLA', 'BEM PASSADO', 'SEM TOMATE', 'VIAGEM', 'POUCO SAL'].map(s => (
+            <div className="mt-4 flex flex-wrap gap-3">
+                {['PRA VIAGEM', 'SEM CEBOLA', 'BEM PASSADO', 'SEM TOMATE', 'POUCO SAL'].map(s => (
                     <button 
                         key={s} 
                         onClick={() => setObservation(prev => prev ? `${prev}, ${s}` : s)}
-                        className="bg-slate-100 px-6 py-3 rounded-full font-black text-sm text-slate-600 hover:bg-[#C5A021] hover:text-white transition-all uppercase"
+                        className="bg-slate-100 px-6 py-3 rounded-full font-black text-base text-slate-600 hover:bg-[#C5A021] hover:text-white transition-all uppercase"
                     >
                         + {s}
                     </button>
