@@ -22,6 +22,14 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, onClose }) => {
     PrinterService.testPrint({ ip, name });
   };
 
+  const handleOpenPrintLog = async () => {
+    try {
+      await window.electronAPI?.openPrintLog();
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'Não foi possível abrir o relatório.');
+    }
+  };
+
   return (
     <div className="absolute inset-0 bg-slate-900/80 backdrop-blur-md z-50 flex items-center justify-center p-8">
       <div className="bg-white w-full max-w-2xl rounded-[40px] shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] overflow-hidden">
@@ -67,6 +75,12 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, onClose }) => {
                 className="py-6 border-4 border-slate-900 text-slate-900 font-black rounded-2xl hover:bg-slate-50 transition-all uppercase text-xl"
              >
                Emitir Teste
+             </button>
+             <button
+                onClick={handleOpenPrintLog}
+                className="py-5 border-4 border-slate-200 text-slate-600 font-black rounded-2xl hover:bg-slate-50 transition-all uppercase text-lg"
+             >
+               Abrir Relatório de Impressão
              </button>
              <button 
                 onClick={handleSave}

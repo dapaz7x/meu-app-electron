@@ -73,7 +73,7 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }
     ? [...SALTY_ADDONS, ...SWEET_ADDONS] 
     : SALTY_ADDONS;
 
-  const isBurger = selectedItem?.category === 'BURGER' && (selectedItem.name.includes('X-Burguer') || selectedItem.name.includes('X-Tudo'));
+  const isBurger = selectedItem?.category === 'BURGER';
 
   return (
     <div className="h-full flex flex-col bg-white">
