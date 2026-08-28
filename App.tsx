@@ -18,7 +18,7 @@ const App: React.FC = () => {
   const [isComandaInvalid, setIsComandaInvalid] = useState(false);
   const [printerConfig, setPrinterConfig] = useState<PrinterConfig>(() => {
     const saved = localStorage.getItem('araujo_printer');
-    return saved ? JSON.parse(saved) : { ip: '192.168.1.100', name: 'Elgin i8' };
+    return saved ? JSON.parse(saved) : { name: 'ELGIN i8' };
   });
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);

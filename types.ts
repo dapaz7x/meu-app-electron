@@ -46,14 +46,13 @@ export interface Order {
 export type View = 'DASHBOARD' | 'WIZARD' | 'REPORTS' | 'SETTINGS';
 
 export interface PrinterConfig {
-  ip: string;
   name: string;
 }
 
 declare global {
   interface Window {
     electronAPI?: {
-      printReceipt: (payload: { printerName: string; html: string }) => Promise<void>;
+      printReceipt: (payload: { printerName: string; rawData: string }) => Promise<void>;
       openPrintLog: () => Promise<void>;
     };
   }

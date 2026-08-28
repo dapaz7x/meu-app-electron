@@ -2,6 +2,10 @@ const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const fs = require("fs");
+const os = require("os");
+const { execFile } = require("child_process");
+const { promisify } = require("util");
+const execFileAsync = promisify(execFile);
 
 function printLogPath() {
   return path.join(app.getPath("userData"), "impressao.log");
@@ -28,11 +32,11 @@ function createWindow() {
 }
 
 ipcMain.handle("print-receipt", async (event, payload) => {
-  let printWindow;
+  let rawFile;
   try {
     const requestedPrinterName = String(payload?.printerName || "");
-    const receiptHtml = String(payload?.html || "");
-    if (!receiptHtml) throw new Error("Conteúdo da comanda não foi recebido.");
+    const rawData = String(payload?.rawData || "");
+    if (!rawData) throw new Error("Conteúdo RAW da comanda não foi recebido.");
 
     const printers = await event.sender.getPrintersAsync();
     const normalizedName = String(requestedPrinterName || "").trim().toLowerCase();
@@ -52,55 +56,28 @@ ipcMain.handle("print-receipt", async (event, payload) => {
     }
 
     writePrintLog(`Impressora selecionada: ${printer.name}`);
-    printWindow = new BrowserWindow({
-      show: false,
-      width: 303,
-      height: 1123,
-      webPreferences: {
-        backgroundThrottling: false,
-        contextIsolation: true,
-        nodeIntegration: false
-      }
-    });
+    rawFile = path.join(os.tmpdir(), `gestor-chapa-${process.pid}-${Date.now()}.bin`);
+    fs.writeFileSync(rawFile, Buffer.from(rawData, "base64"));
+    const scriptPath = path.join(__dirname, "rawPrinter.ps1");
+    writePrintLog(`Enviando ${fs.statSync(rawFile).size} bytes em modo RAW/ESC-POS.`);
 
-    const printDocument = `<!doctype html>
-      <html><head><meta charset="utf-8"><style>
-        @page { margin: 0; }
-        html, body { margin: 0; padding: 0; width: 72.1mm; background: white; }
-        .thermal-print {
-          width: 72.1mm; padding: 2mm; margin: 0; box-sizing: border-box;
-          overflow: hidden; font-family: "Courier New", monospace;
-          font-size: 14pt; line-height: 1.2; background: white; color: black;
-        }
-      </style></head><body>${receiptHtml}</body></html>`;
+    const { stdout, stderr } = await execFileAsync("powershell.exe", [
+      "-NoProfile",
+      "-NonInteractive",
+      "-ExecutionPolicy", "Bypass",
+      "-File", scriptPath,
+      "-PrinterName", printer.name,
+      "-DataFile", rawFile
+    ], { windowsHide: true, timeout: 20000 });
 
-    await printWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(printDocument)}`);
-    writePrintLog("Janela exclusiva de impressão carregada com o tamanho de 80 mm.");
-
-    await new Promise((resolve, reject) => {
-      printWindow.webContents.print({
-        silent: true,
-        printBackground: true,
-        deviceName: printer.name,
-        usePrinterDefaultPageSize: true,
-        margins: { marginType: "none" },
-        landscape: false,
-        scaleFactor: 100
-      }, (success, failureReason) => {
-        if (success) {
-          writePrintLog("Pedido aceito pela fila de impressão.");
-          resolve();
-        } else {
-          writePrintLog(`Falha retornada pelo Windows: ${failureReason || "sem motivo"}`);
-          reject(new Error(failureReason || "Falha ao imprimir."));
-        }
-      });
-    });
+    if (stdout.trim()) writePrintLog(`PowerShell: ${stdout.trim()}`);
+    if (stderr.trim()) writePrintLog(`PowerShell aviso: ${stderr.trim()}`);
+    writePrintLog("Dados RAW/ESC-POS entregues ao spooler do Windows.");
   } catch (error) {
     writePrintLog(`ERRO: ${error instanceof Error ? error.stack || error.message : String(error)}`);
     throw error;
   } finally {
-    if (printWindow && !printWindow.isDestroyed()) printWindow.destroy();
+    if (rawFile && fs.existsSync(rawFile)) fs.unlinkSync(rawFile);
   }
 });
 
