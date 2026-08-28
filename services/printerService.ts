@@ -43,8 +43,8 @@ class PrinterService {
                 ${cfg.cheese ? `<p style="font-size: 14pt; margin: 2px 0;">QUEIJO: <strong>${cfg.cheese.toUpperCase()}</strong></p>` : ''}
                 
                 ${cfg.selectedAddOns.length > 0 ? `
-                  <p style="font-size: 12pt; margin: 5px 0;"><strong>ADICIONAIS:</strong></p>
-                  <div style="padding-left: 15px; font-size: 12pt;">
+                  <p style="font-size: 16pt; margin: 10px 0 8px; font-weight: 900;"><strong>ADICIONAIS:</strong></p>
+                  <div style="padding-left: 15px; font-size: 16pt; font-weight: 900; line-height: 1.65;">
                     ${cfg.selectedAddOns.map(a => `• ${a.name.toUpperCase()}`).join('<br>')}
                   </div>
                 ` : ''}
@@ -117,7 +117,7 @@ class PrinterService {
     let bodyLines = 0;
     const chunks: Array<number[] | string> = [
       [ESC, 0x40],
-      [ESC, 0x33, 0x24],
+      [ESC, 0x33, 0x30],
       [ESC, 0x61, 0x01],
       [ESC, 0x45, 0x01],
       [GS, 0x21, 0x11],
@@ -150,17 +150,36 @@ class PrinterService {
           bodyLines += 1;
         }
         if (cfg.cheese) {
-          chunks.push(`QUEIJO: ${cfg.cheese.toUpperCase()}\n`);
-          bodyLines += 1;
+          chunks.push(
+            [ESC, 0x45, 0x01],
+            [GS, 0x21, 0x01],
+            `QUEIJO: ${cfg.cheese.toUpperCase()}\n`,
+            [GS, 0x21, 0x00],
+            [ESC, 0x45, 0x00],
+            '\n'
+          );
+          bodyLines += 3;
         }
         if (cfg.selectedAddOns.length) {
-          chunks.push([ESC, 0x45, 0x01], 'ADICIONAIS:\n', [ESC, 0x45, 0x00]);
-          cfg.selectedAddOns.forEach(addOn => chunks.push(`- ${addOn.name.toUpperCase()}\n`));
-          bodyLines += 1 + cfg.selectedAddOns.length;
+          chunks.push(
+            [ESC, 0x45, 0x01],
+            [GS, 0x21, 0x01],
+            'ADICIONAIS:\n\n'
+          );
+          cfg.selectedAddOns.forEach(addOn => chunks.push(`- ${addOn.name.toUpperCase()}\n\n`));
+          chunks.push([GS, 0x21, 0x00], [ESC, 0x45, 0x00]);
+          bodyLines += 2 + (cfg.selectedAddOns.length * 2);
         }
         if (cfg.observation) {
-          chunks.push('\n', [ESC, 0x45, 0x01], `OBS: ${cfg.observation.toUpperCase()}\n`, [ESC, 0x45, 0x00]);
-          bodyLines += 2;
+          chunks.push(
+            '\n',
+            [ESC, 0x45, 0x01],
+            [GS, 0x21, 0x01],
+            `OBS: ${cfg.observation.toUpperCase()}\n`,
+            [GS, 0x21, 0x00],
+            [ESC, 0x45, 0x00]
+          );
+          bodyLines += 3;
         }
       });
       chunks.push('\n', '------------------------------------------\n');
