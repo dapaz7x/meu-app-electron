@@ -11,9 +11,10 @@ class PrinterService {
     const printContent = `
       <div class="thermal-print">
         <center>
-          <div style="background: black; color: white; padding: 2px; margin-bottom: 5px;">
-            <h1 style="font-size: 32pt; margin: 0;">COMANDA: ${order.comanda}</h1>
-            ${isMerge ? '<h2 style="font-size: 6pt; margin: 0; background: white; color: black;">ADICIONAL / ALTERAÇÃO</h2>' : ''}
+          <div style="background: white; color: black; border: 4px solid black; padding: 3px; margin-bottom: 5px;">
+            <div style="font-size: 16pt; font-weight: 900; line-height: 1;">COMANDA</div>
+            <div style="font-size: 40pt; font-weight: 900; line-height: 1;">${order.comanda}</div>
+            ${isMerge ? '<h2 style="font-size: 10pt; margin: 3px 0 0; border-top: 2px solid black;">ADICIONAL / ALTERAÇÃO</h2>' : ''}
           </div>
           <p style="margin: 5px 0; font-size: 14pt;">DATA: ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString()}</p>
         </center>
@@ -60,7 +61,7 @@ class PrinterService {
       </div>
     `;
 
-    this.executeBrowserPrint(printContent);
+    this.executeBrowserPrint(printContent, config);
   }
 
   static testPrint(config: PrinterConfig) {
@@ -75,15 +76,36 @@ class PrinterService {
         </center>
       </div>
     `;
-    this.executeBrowserPrint(printContent);
+    this.executeBrowserPrint(printContent, config);
   }
 
-  private static executeBrowserPrint(html: string) {
+  private static async executeBrowserPrint(html: string, config: PrinterConfig) {
     const printElement = document.getElementById('print-area');
     if (printElement) {
       printElement.innerHTML = html;
-      window.print();
+      await new Promise<void>(resolve =>
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+      );
+
+      try {
+        if (window.electronAPI?.printReceipt) {
+          await window.electronAPI.printReceipt(config.name);
+        } else {
+          window.print();
+        }
+      } catch (error) {
+        console.error('Falha na impressão direta:', error);
+        alert(error instanceof Error ? error.message : 'Não foi possível imprimir o pedido.');
+      }
     }
+  }
+}
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      printReceipt: (printerName: string) => Promise<void>;
+    };
   }
 }
 
