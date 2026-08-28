@@ -1,6 +1,7 @@
 name: Publicar versão do Windows
 
 on:
+  workflow_dispatch:
   push:
     tags:
       - "v*"
