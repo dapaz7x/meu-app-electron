@@ -33,7 +33,8 @@
       {
         "provider": "github",
         "owner": "dapaz7x",
-        "repo": "meu-app-electron"
+        "repo": "meu-app-electron",
+        "releaseType": "release"
       }
     ],
     "win": {
