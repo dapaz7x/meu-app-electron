@@ -58,7 +58,12 @@ ipcMain.handle("print-receipt", async (event, payload) => {
     writePrintLog(`Impressora selecionada: ${printer.name}`);
     rawFile = path.join(os.tmpdir(), `gestor-chapa-${process.pid}-${Date.now()}.bin`);
     fs.writeFileSync(rawFile, Buffer.from(rawData, "base64"));
-    const scriptPath = path.join(__dirname, "rawPrinter.ps1");
+    const scriptPath = app.isPackaged
+      ? path.join(process.resourcesPath, "app.asar.unpacked", "rawPrinter.ps1")
+      : path.join(__dirname, "rawPrinter.ps1");
+    if (!fs.existsSync(scriptPath)) {
+      throw new Error(`Arquivo auxiliar de impressão não encontrado: ${scriptPath}`);
+    }
     writePrintLog(`Enviando ${fs.statSync(rawFile).size} bytes em modo RAW/ESC-POS.`);
 
     const { stdout, stderr } = await execFileAsync("powershell.exe", [
