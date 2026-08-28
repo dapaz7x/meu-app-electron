@@ -80,32 +80,27 @@ class PrinterService {
   }
 
   private static async executeBrowserPrint(html: string, config: PrinterConfig) {
-    const printElement = document.getElementById('print-area');
-    if (printElement) {
-      printElement.innerHTML = html;
+    const printElement = document.createElement('div');
+    printElement.className = 'print-only';
+    printElement.innerHTML = html;
+    document.body.appendChild(printElement);
+
+    try {
       await new Promise<void>(resolve =>
         requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
       );
 
-      try {
-        if (window.electronAPI?.printReceipt) {
-          await window.electronAPI.printReceipt(config.name);
-        } else {
-          window.print();
-        }
-      } catch (error) {
-        console.error('Falha na impressão direta:', error);
-        alert(error instanceof Error ? error.message : 'Não foi possível imprimir o pedido.');
+      if (window.electronAPI?.printReceipt) {
+        await window.electronAPI.printReceipt(config.name);
+      } else {
+        window.print();
       }
+    } catch (error) {
+      console.error('Falha na impressão direta:', error);
+      alert(error instanceof Error ? error.message : 'Não foi possível imprimir o pedido.');
+    } finally {
+      printElement.remove();
     }
-  }
-}
-
-declare global {
-  interface Window {
-    electronAPI?: {
-      printReceipt: (printerName: string) => Promise<void>;
-    };
   }
 }
 
