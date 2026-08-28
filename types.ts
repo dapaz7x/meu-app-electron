@@ -49,3 +49,12 @@ export interface PrinterConfig {
   ip: string;
   name: string;
 }
+
+declare global {
+  interface Window {
+    electronAPI?: {
+      printReceipt: (printerName: string) => Promise<void>;
+      openPrintLog: () => Promise<void>;
+    };
+  }
+}

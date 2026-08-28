@@ -3,22 +3,28 @@ import { MenuItem, AddOn } from './types';
 
 export const MENU_ITEMS: MenuItem[] = [
   // LANCHES NA CHAPA
-  { id: '1', name: 'Ovo Mexido', category: 'LANCHE', icon: 'fa-solid fa-egg' },
+  { id: '1', name: 'Ovos Mexidos', category: 'LANCHE', icon: 'fa-solid fa-egg' },
   { id: '2', name: 'Omelete Araújo', category: 'LANCHE', icon: 'fa-solid fa-stroopwafel' },
   { id: '3', name: 'Macarrão na Chapa', category: 'LANCHE', icon: 'fa-solid fa-plate-wheat' },
-  { id: '4', name: 'Pão com Linguiça', category: 'LANCHE', icon: 'fa-solid fa-hotdog' },
-  { id: '5', name: 'Pão com Pernil', category: 'LANCHE', icon: 'fa-solid fa-bread-slice' },
-  { id: '6', name: 'Pão com Queijo', category: 'LANCHE', icon: 'fa-solid fa-cheese' },
-  { id: '7', name: 'Pão com Manteiga', category: 'LANCHE', icon: 'fa-solid fa-bread-slice' }, // Fixed icon
-  { id: '8', name: 'Misto Quente', category: 'LANCHE', icon: 'fa-solid fa-sandwich' },
-  { id: '9', name: 'Misto + Ovo/Bacon', category: 'LANCHE', icon: 'fa-solid fa-bacon' },
-  { id: '10', name: 'Tapioca Salgada', category: 'TAPIOCA', icon: 'fa-solid fa-moon' },
-  { id: '11', name: 'Tapioca Doce', category: 'TAPIOCA', icon: 'fa-solid fa-cookie' },
-  { id: '12', name: 'Crepioca', category: 'CREPIOCA', icon: 'fa-solid fa-circle-dot' },
+  { id: '4', name: 'Pão com Pernil', category: 'LANCHE', icon: 'fa-solid fa-bread-slice' },
+  { id: '5', name: 'Pão c/ Queijo na Chapa', category: 'LANCHE', icon: 'fa-solid fa-cheese' },
+  { id: '6', name: 'Pão com Manteiga', category: 'LANCHE', icon: 'fa-solid fa-bread-slice' },
+  { id: '7', name: 'Pão com Linguiça', category: 'LANCHE', icon: 'fa-solid fa-hotdog' },
+  { id: '8', name: 'Pão c/ Ovo e Queijo Minas', category: 'LANCHE', icon: 'fa-solid fa-egg' },
+  { id: '9', name: 'Pão com Ovo', category: 'LANCHE', icon: 'fa-solid fa-egg' },
+  { id: '10', name: 'Misto Quente', category: 'LANCHE', icon: 'fa-solid fa-bread-slice' },
+  { id: '11', name: 'Misto c/ Ovo', category: 'LANCHE', icon: 'fa-solid fa-egg' },
+  { id: '12', name: 'Misto c/ Ovo e Bacon', category: 'LANCHE', icon: 'fa-solid fa-bacon' },
+  { id: '13', name: 'Tapioca', category: 'TAPIOCA', icon: 'fa-solid fa-moon' },
+  { id: '14', name: 'Crepioca', category: 'CREPIOCA', icon: 'fa-solid fa-circle-dot' },
   // HAMBÚRGUERES
-  { id: '13', name: 'Burguer Kids Araújo', category: 'BURGER', icon: 'fa-solid fa-burger' },
-  { id: '14', name: 'X-Burguer Araújo', category: 'BURGER', icon: 'fa-solid fa-burger' },
-  { id: '15', name: 'X-Tudo Araújo', category: 'BURGER', icon: 'fa-solid fa-burger' },
+  { id: '15', name: 'Tradicional Araújo', category: 'BURGER', icon: 'fa-solid fa-burger' },
+  { id: '16', name: 'Kids Araújo', category: 'BURGER', icon: 'fa-solid fa-burger' },
+  { id: '17', name: 'Picante Araújo', category: 'BURGER', icon: 'fa-solid fa-burger' },
+  { id: '18', name: 'Egg Bacon Araújo', category: 'BURGER', icon: 'fa-solid fa-burger' },
+  { id: '19', name: 'X Burguer Araújo', category: 'BURGER', icon: 'fa-solid fa-burger' },
+  { id: '20', name: 'Duplo Cheddar Araújo', category: 'BURGER', icon: 'fa-solid fa-burger' },
+  { id: '21', name: 'Batata Frita', category: 'LANCHE', icon: 'fa-solid fa-bowl-food' },
 ];
 
 export const SALTY_ADDONS: AddOn[] = [
@@ -39,6 +45,8 @@ export const SALTY_ADDONS: AddOn[] = [
   { id: 's15', name: 'Catupiry', type: 'SALGADO' },
   { id: 's16', name: 'Cheddar', type: 'SALGADO' },
   { id: 's17', name: 'Milho', type: 'SALGADO' },
+  { id: 's18', name: 'Mussarela', type: 'SALGADO' },
+  { id: 's19', name: 'Queijo Minas', type: 'SALGADO' },
 ];
 
 export const SWEET_ADDONS: AddOn[] = [
