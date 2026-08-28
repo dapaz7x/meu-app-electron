@@ -153,7 +153,8 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="h-screen flex flex-col overflow-hidden bg-slate-50">
+    <>
+    <div className="no-print h-screen flex flex-col overflow-hidden bg-slate-50">
       <header className="bg-white text-slate-800 p-4 flex justify-between items-center border-b-4 border-[#C5A021] shadow-md z-50">
         <div className="flex items-center gap-4">
           <div className="bg-[#E53935] w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-lg rotate-3">
@@ -213,8 +214,9 @@ const App: React.FC = () => {
         {view === 'REPORTS' && <Reports orders={orders} onClose={() => setView('DASHBOARD')} />}
         {view === 'SETTINGS' && <Settings config={printerConfig} onSave={setPrinterConfig} onClose={() => setView('DASHBOARD')} />}
       </main>
-      <div id="print-area" className="print-only"></div>
     </div>
+    <div id="print-area" className="print-only"></div>
+    </>
   );
 };
 

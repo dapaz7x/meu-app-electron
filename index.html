@@ -18,6 +18,17 @@
         }
         
         @media print {
+            @page {
+                margin: 0;
+            }
+
+            html, body {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 72.1mm;
+                background: white !important;
+            }
+
             .no-print { display: none !important; }
             .print-only { display: block !important; }
         }
@@ -26,8 +37,11 @@
         
         /* Thermal Paper Layout Simulation */
         .thermal-print {
-            width: 80mm;
-            padding: 5mm;
+            width: 72.1mm;
+            padding: 2mm;
+            margin: 0;
+            box-sizing: border-box;
+            overflow: hidden;
             font-family: 'Courier New', Courier, monospace;
             font-size: 14pt;
             line-height: 1.2;
