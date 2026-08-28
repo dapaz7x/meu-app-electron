@@ -10,16 +10,15 @@ interface SettingsProps {
 }
 
 const Settings: React.FC<SettingsProps> = ({ config, onSave, onClose }) => {
-  const [ip, setIp] = useState(config.ip);
   const [name, setName] = useState(config.name);
 
   const handleSave = () => {
-    onSave({ ip, name });
+    onSave({ name });
     onClose();
   };
 
   const handleTestPrint = () => {
-    PrinterService.testPrint({ ip, name });
+    PrinterService.testPrint({ name });
   };
 
   const handleOpenPrintLog = async () => {
@@ -55,18 +54,9 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, onClose }) => {
             </div>
           </div>
 
-          <div className="space-y-4">
-            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest">Endereço de Rede (IP)</label>
-            <div className="relative">
-              <i className="fa-solid fa-network-wired absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 text-xl"></i>
-              <input 
-                type="text" 
-                value={ip} 
-                onChange={e => setIp(e.target.value)}
-                className="w-full pl-14 pr-6 py-6 border-4 border-slate-50 rounded-2xl text-2xl font-black focus:outline-none focus:border-[#E53935] transition-all"
-                placeholder="192.168.1.100"
-              />
-            </div>
+          <div className="rounded-2xl bg-emerald-50 border-2 border-emerald-200 p-5 text-emerald-800 font-bold">
+            <i className="fa-solid fa-usb mr-3"></i>
+            Conexão local por cabo USB — não utiliza endereço IP.
           </div>
 
           <div className="pt-6 grid grid-cols-1 gap-4">
