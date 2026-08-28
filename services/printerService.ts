@@ -6,7 +6,7 @@ class PrinterService {
    * Layout de impressão para Elgin i8 (80mm)
    */
   static printOrder(order: Order, config: PrinterConfig, isMerge: boolean = false) {
-    console.log(`Printing to ${config.name} at ${config.ip}...`);
+    console.log(`Printing to local Windows queue ${config.name}...`);
     
     const printContent = `
       <div class="thermal-print">
@@ -61,7 +61,8 @@ class PrinterService {
       </div>
     `;
 
-    this.executeBrowserPrint(printContent, config);
+    const rawData = this.buildEscPosReceipt(order, isMerge);
+    this.executeBrowserPrint(printContent, rawData, config);
   }
 
   static testPrint(config: PrinterConfig) {
@@ -70,19 +71,107 @@ class PrinterService {
         <center>
           <h1 style="font-size: 20pt;">TESTE DE CONEXÃO</h1>
           <p>EQUIPAMENTO: ${config.name}</p>
-          <p>IP: ${config.ip}</p>
+          <p>CONEXÃO: USB LOCAL</p>
           <hr style="border: 1px dashed black;">
           <p style="font-size: 16pt;">PRONTO PARA USO</p>
         </center>
       </div>
     `;
-    this.executeBrowserPrint(printContent, config);
+    const rawData = this.buildEscPosTest(config);
+    this.executeBrowserPrint(printContent, rawData, config);
   }
 
-  private static async executeBrowserPrint(html: string, config: PrinterConfig) {
+  private static ascii(text: string) {
+    return text
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\x20-\x7E\n]/g, '');
+  }
+
+  private static escPosBase64(chunks: Array<number[] | string>) {
+    const bytes: number[] = [];
+    chunks.forEach(chunk => {
+      if (typeof chunk === 'string') {
+        const value = this.ascii(chunk);
+        for (let i = 0; i < value.length; i += 1) bytes.push(value.charCodeAt(i));
+      } else {
+        bytes.push(...chunk);
+      }
+    });
+
+    let binary = '';
+    bytes.forEach(byte => { binary += String.fromCharCode(byte); });
+    return btoa(binary);
+  }
+
+  private static buildEscPosReceipt(order: Order, isMerge: boolean) {
+    const ESC = 0x1b;
+    const GS = 0x1d;
+    const chunks: Array<number[] | string> = [
+      [ESC, 0x40],
+      [ESC, 0x61, 0x01],
+      [ESC, 0x45, 0x01],
+      [GS, 0x21, 0x11],
+      'COMANDA\n',
+      [GS, 0x21, 0x22],
+      `${order.comanda}\n`,
+      [GS, 0x21, 0x00],
+      [ESC, 0x45, 0x00],
+      isMerge ? 'ADICIONAL / ALTERACAO\n' : '',
+      `${new Date().toLocaleString('pt-BR')}\n`,
+      '------------------------------------------\n',
+      [ESC, 0x61, 0x00]
+    ];
+
+    order.entries.forEach(entry => {
+      chunks.push([ESC, 0x45, 0x01], [GS, 0x21, 0x11]);
+      chunks.push(`${entry.quantity}X ${entry.item.name.toUpperCase()}\n`);
+      chunks.push([GS, 0x21, 0x00], [ESC, 0x45, 0x00]);
+
+      entry.configs.forEach((cfg, index) => {
+        if (entry.quantity > 1) chunks.push(`[ITEM ${index + 1}]\n`);
+        if (cfg.cheese) chunks.push(`QUEIJO: ${cfg.cheese.toUpperCase()}\n`);
+        if (cfg.selectedAddOns.length) {
+          chunks.push([ESC, 0x45, 0x01], 'ADICIONAIS:\n', [ESC, 0x45, 0x00]);
+          cfg.selectedAddOns.forEach(addOn => chunks.push(`- ${addOn.name.toUpperCase()}\n`));
+        }
+        if (cfg.observation) {
+          chunks.push([ESC, 0x45, 0x01], `OBS: ${cfg.observation.toUpperCase()}\n`, [ESC, 0x45, 0x00]);
+        }
+      });
+      chunks.push('------------------------------------------\n');
+    });
+
+    chunks.push(
+      [ESC, 0x61, 0x01],
+      [ESC, 0x45, 0x01],
+      'PADARIA ARAUJO - SETOR CHAPA\n',
+      [ESC, 0x45, 0x00],
+      `${new Date().toLocaleString('pt-BR')}\n`,
+      [ESC, 0x64, 0x04],
+      [GS, 0x56, 0x00]
+    );
+    return this.escPosBase64(chunks);
+  }
+
+  private static buildEscPosTest(config: PrinterConfig) {
+    const ESC = 0x1b;
+    const GS = 0x1d;
+    return this.escPosBase64([
+      [ESC, 0x40], [ESC, 0x61, 0x01], [ESC, 0x45, 0x01], [GS, 0x21, 0x11],
+      'TESTE DE CONEXAO\n',
+      [GS, 0x21, 0x00], [ESC, 0x45, 0x00],
+      `EQUIPAMENTO: ${config.name}\n`,
+      'IMPRESSAO RAW/ESC-POS\n',
+      'PRONTO PARA USO\n',
+      [ESC, 0x64, 0x04], [GS, 0x56, 0x00]
+    ]);
+  }
+
+  private static async executeBrowserPrint(html: string, rawData: string, config: PrinterConfig) {
     try {
       if (window.electronAPI?.printReceipt) {
-        await window.electronAPI.printReceipt({ printerName: config.name, html });
+        await window.electronAPI.printReceipt({ printerName: config.name, rawData });
       } else {
         const printElement = document.createElement('div');
         printElement.className = 'print-only';
