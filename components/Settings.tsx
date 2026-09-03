@@ -32,7 +32,6 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, onClose }) => {
     setSaving(true);
     setMessage('');
 
-    // A impressora é persistida independentemente da comunicação entre os computadores.
     localStorage.setItem('araujo_printer', JSON.stringify(printerValues));
     onSave(printerValues);
 
@@ -58,7 +57,14 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, onClose }) => {
   const handleCheckComputers = async () => {
     setCheckingNetwork(true);
     setDiagnostics(null);
+    setMessage('');
+
     try {
+      // O diagnóstico agora aplica primeiro a seleção atual.
+      // Assim, marcar PC PRINCIPAL e clicar em "Verificar agora" já inicia a porta 37842.
+      const applied = await window.electronAPI?.saveNetworkConfig(network);
+      if (applied) setNetwork(applied);
+
       const result = await window.electronAPI?.checkNetworkLink();
       if (result) setDiagnostics(result);
     } catch (error) {
@@ -120,14 +126,14 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, onClose }) => {
             <div className="flex items-center justify-between gap-5">
               <div>
                 <h3 className="font-black uppercase text-xl text-slate-900">Diagnóstico dos computadores</h3>
-                <p className="text-sm font-bold text-slate-500">Verifica se o principal e o secundário estão realmente se comunicando pela porta 37842.</p>
+                <p className="text-sm font-bold text-slate-500">Aplica a seleção atual, inicia o servidor quando este PC é o principal e testa a porta 37842.</p>
               </div>
               <button
                 onClick={handleCheckComputers}
                 disabled={checkingNetwork}
                 className="px-7 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase disabled:opacity-50 whitespace-nowrap"
               >
-                {checkingNetwork ? 'Verificando...' : 'Verificar agora'}
+                {checkingNetwork ? 'Verificando...' : 'Aplicar e verificar'}
               </button>
             </div>
 
@@ -135,7 +141,7 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, onClose }) => {
               <div className={`rounded-2xl border-4 p-5 ${diagnostics.ok ? 'bg-emerald-50 border-emerald-300 text-emerald-950' : 'bg-red-50 border-red-200 text-red-950'}`}>
                 <div className="flex items-center gap-3 mb-3">
                   <i className={`fa-solid ${diagnostics.ok ? 'fa-circle-check' : 'fa-triangle-exclamation'} text-2xl`}></i>
-                  <span className="font-black uppercase text-lg">{diagnostics.ok ? 'Comunicação OK' : 'Comunicação com problema'}</span>
+                  <span className="font-black uppercase text-lg">{diagnostics.ok ? 'Comunicação / servidor OK' : 'Comunicação com problema'}</span>
                 </div>
                 <div className="font-bold">Modo: <strong>{modeLabel}</strong></div>
                 <div className="font-bold">IP deste PC: <strong>{diagnostics.localIps.join(' / ') || 'não identificado'}</strong></div>
@@ -201,13 +207,18 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, onClose }) => {
             </div>
             {network.mode === 'host' && (
               <div className="rounded-xl bg-emerald-50 border-2 border-emerald-200 p-4 text-emerald-800 font-bold">
-                IP deste PC: <strong>{network.localIps?.join(' ou ') || 'será exibido após salvar'}</strong> — porta {network.port}
+                IP deste PC: <strong>{network.localIps?.join(' ou ') || 'será exibido após aplicar'}</strong> — porta {network.port}
               </div>
             )}
             {network.mode === 'client' && (
-              <div className="grid grid-cols-[1fr_180px] gap-3">
-                <input value={network.serverIp} onChange={e => setNetwork(current => ({ ...current, serverIp: e.target.value }))} className="px-6 py-4 border-4 border-slate-100 rounded-xl text-xl font-black focus:outline-none focus:border-[#C5A021]" placeholder="IP do PC principal" />
-                <input type="number" value={network.port} onChange={e => setNetwork(current => ({ ...current, port: Number(e.target.value) }))} className="px-6 py-4 border-4 border-slate-100 rounded-xl text-xl font-black focus:outline-none focus:border-[#C5A021]" />
+              <div className="space-y-3">
+                <div className="grid grid-cols-[1fr_180px] gap-3">
+                  <input value={network.serverIp} onChange={e => setNetwork(current => ({ ...current, serverIp: e.target.value }))} className="px-6 py-4 border-4 border-slate-100 rounded-xl text-xl font-black focus:outline-none focus:border-[#C5A021]" placeholder="IP do PC principal" />
+                  <input type="number" value={network.port} onChange={e => setNetwork(current => ({ ...current, port: Number(e.target.value) }))} className="px-6 py-4 border-4 border-slate-100 rounded-xl text-xl font-black focus:outline-none focus:border-[#C5A021]" />
+                </div>
+                <div className="rounded-xl bg-amber-50 border-2 border-amber-200 p-3 text-amber-900 font-bold text-sm">
+                  No secundário, coloque o IP do OUTRO computador. O aplicativo agora bloqueia a configuração se você digitar o IP deste próprio PC.
+                </div>
               </div>
             )}
           </div>
