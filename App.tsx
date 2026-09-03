@@ -18,7 +18,13 @@ const App: React.FC = () => {
   const [isComandaInvalid, setIsComandaInvalid] = useState(false);
   const [printerConfig, setPrinterConfig] = useState<PrinterConfig>(() => {
     const saved = localStorage.getItem('araujo_printer');
-    return saved ? JSON.parse(saved) : { name: 'ELGIN i8' };
+    const parsed = saved ? JSON.parse(saved) : {};
+    return {
+      name: parsed.name || 'POS-80',
+      mode: parsed.mode === 'network' ? 'network' : 'usb',
+      printerIp: parsed.printerIp || '192.168.50.217',
+      printerPort: Number(parsed.printerPort || 9100)
+    };
   });
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
@@ -26,6 +32,44 @@ const App: React.FC = () => {
   useEffect(() => {
     localStorage.setItem('araujo_orders', JSON.stringify(orders));
   }, [orders]);
+
+  useEffect(() => {
+    if (!window.electronAPI?.ordersList) return;
+    let active = true;
+
+    const initializeOrders = async () => {
+      try {
+        const localOrders = (() => {
+          try {
+            const saved = JSON.parse(localStorage.getItem('araujo_orders') || '[]');
+            return Array.isArray(saved) ? saved : [];
+          } catch {
+            return [];
+          }
+        })();
+        if (localOrders.length) await window.electronAPI!.ordersImport(localOrders);
+        const sharedOrders = await window.electronAPI!.ordersList();
+        if (active) setOrders(sharedOrders);
+      } catch (error) {
+        console.error('Não foi possível carregar os pedidos compartilhados:', error);
+      }
+    };
+
+    initializeOrders();
+    const interval = window.setInterval(async () => {
+      try {
+        const sharedOrders = await window.electronAPI!.ordersList();
+        if (active) setOrders(sharedOrders);
+      } catch (error) {
+        console.error('Falha temporária na sincronização:', error);
+      }
+    }, 3000);
+
+    return () => {
+      active = false;
+      window.clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem('araujo_printer', JSON.stringify(printerConfig));
@@ -83,7 +127,7 @@ const App: React.FC = () => {
     }
   };
 
-  const createOrder = (item: MenuItem, quantity: number, configs: OrderItemConfig[]) => {
+  const createOrder = async (item: MenuItem, quantity: number, configs: OrderItemConfig[]) => {
     const newEntry: OrderEntry = {
       id: Math.random().toString(36).substr(2, 9),
       item,
@@ -92,64 +136,69 @@ const App: React.FC = () => {
       addedAt: Date.now()
     };
 
-    setOrders(prev => {
-      const existingOrderIndex = prev.findIndex(o => o.comanda === activeComanda && o.status !== OrderStatus.FINISHED);
-      
-      if (existingOrderIndex > -1) {
-        const updatedOrders = [...prev];
-        const existingOrder = updatedOrders[existingOrderIndex];
-        // Adiciona novo item à comanda existente
-        updatedOrders[existingOrderIndex] = {
-          ...existingOrder,
-          entries: [...existingOrder.entries, newEntry],
-          status: OrderStatus.PREPARING // Volta para preparando se estava pronta
-        };
-        // Opcional: imprimir apenas o novo item ou a comanda toda? 
-        // Vamos imprimir a comanda toda sinalizando o que é novo.
-        PrinterService.printOrder(updatedOrders[existingOrderIndex], printerConfig, true);
-        return updatedOrders;
-      } else {
-        // Cria nova comanda
-        const newOrder: Order = {
-          id: Math.random().toString(36).substr(2, 9),
-          comanda: activeComanda || '000',
-          entries: [newEntry],
-          status: OrderStatus.PREPARING,
-          createdAt: Date.now(),
-        };
-        PrinterService.printOrder(newOrder, printerConfig);
-        return [...prev, newOrder];
-      }
-    });
+    const existingOrder = orders.find(o => o.comanda === activeComanda && o.status !== OrderStatus.FINISHED);
+    const orderToSave: Order = existingOrder ? {
+      ...existingOrder,
+      entries: [...existingOrder.entries, newEntry],
+      status: OrderStatus.PREPARING
+    } : {
+      id: Math.random().toString(36).substr(2, 9),
+      comanda: activeComanda || '000',
+      entries: [newEntry],
+      status: OrderStatus.PREPARING,
+      createdAt: Date.now()
+    };
+
+    setOrders(prev => [...prev.filter(order => order.id !== orderToSave.id), orderToSave]);
+    try {
+      await window.electronAPI?.ordersSave(orderToSave);
+      PrinterService.printOrder(orderToSave, printerConfig, Boolean(existingOrder));
+    } catch (error) {
+      alert(error instanceof Error
+        ? `O pedido apareceu nesta tela, mas não foi sincronizado: ${error.message}`
+        : 'O pedido apareceu nesta tela, mas não foi sincronizado.');
+    }
 
     setView('DASHBOARD');
     setActiveComanda(null);
     setIsComandaInvalid(false);
   };
 
-  const updateOrderStatus = (id: string) => {
-    setOrders(prev => prev.map(order => {
-      if (order.id !== id) return order;
-      if (order.status === OrderStatus.PREPARING) {
-        return { ...order, status: OrderStatus.READY, readyAt: Date.now() };
-      }
-      if (order.status === OrderStatus.READY) {
-        return { ...order, status: OrderStatus.FINALIZING };
-      }
-      return order;
-    }));
+  const updateOrderStatus = async (id: string) => {
+    const current = orders.find(order => order.id === id);
+    if (!current) return;
 
-    setTimeout(() => {
-      setOrders(prev => {
-        const order = prev.find(o => o.id === id);
-        if (order?.status === OrderStatus.FINALIZING) {
-          return prev.filter(o => o.id !== id).concat(
-            prev.filter(o => o.id === id).map(o => ({ ...o, status: OrderStatus.FINISHED, finishedAt: Date.now() }))
-          );
+    if (current.status === OrderStatus.PREPARING) {
+      const changes = { status: OrderStatus.READY, readyAt: Date.now() };
+      setOrders(prev => prev.map(order => order.id === id ? { ...order, ...changes } : order));
+      try {
+        await window.electronAPI?.ordersStatus({ id, changes });
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Não foi possível sincronizar o status.');
+      }
+      return;
+    }
+
+    if (current.status === OrderStatus.READY) {
+      const finalizingChanges = { status: OrderStatus.FINALIZING };
+      setOrders(prev => prev.map(order => order.id === id ? { ...order, ...finalizingChanges } : order));
+      try {
+        await window.electronAPI?.ordersStatus({ id, changes: finalizingChanges });
+      } catch (error) {
+        alert(error instanceof Error ? error.message : 'Não foi possível sincronizar o status.');
+        return;
+      }
+
+      window.setTimeout(async () => {
+        const finishedChanges = { status: OrderStatus.FINISHED, finishedAt: Date.now() };
+        setOrders(prev => prev.map(order => order.id === id ? { ...order, ...finishedChanges } : order));
+        try {
+          await window.electronAPI?.ordersStatus({ id, changes: finishedChanges });
+        } catch (error) {
+          console.error('Não foi possível concluir o pedido compartilhado:', error);
         }
-        return prev;
-      });
-    }, 3000);
+      }, 3000);
+    }
   };
 
   return (

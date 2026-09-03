@@ -47,13 +47,37 @@ export type View = 'DASHBOARD' | 'WIZARD' | 'REPORTS' | 'SETTINGS';
 
 export interface PrinterConfig {
   name: string;
+  mode: 'usb' | 'network';
+  printerIp: string;
+  printerPort: number;
+}
+
+export interface NetworkConfig {
+  mode: 'local' | 'host' | 'client';
+  serverIp: string;
+  port: number;
+  localIps?: string[];
 }
 
 declare global {
   interface Window {
     electronAPI?: {
-      printReceipt: (payload: { printerName: string; rawData: string }) => Promise<void>;
+      printReceipt: (payload: {
+        printerName: string;
+        printerMode: 'usb' | 'network';
+        printerIp: string;
+        printerPort: number;
+        rawData: string;
+      }) => Promise<void>;
       openPrintLog: () => Promise<void>;
+      checkNetworkPrinter: (payload: { printerIp: string; printerPort: number }) => Promise<{ reachable: boolean }>;
+      getNetworkConfig: () => Promise<NetworkConfig>;
+      saveNetworkConfig: (config: NetworkConfig) => Promise<NetworkConfig>;
+      ordersList: () => Promise<Order[]>;
+      ordersSave: (order: Order) => Promise<Order>;
+      ordersImport: (orders: Order[]) => Promise<Order[]>;
+      ordersStatus: (payload: { id: string; changes: Partial<Order> }) => Promise<{ ok: boolean }>;
+      getAppVersion: () => Promise<string>;
     };
   }
 }
