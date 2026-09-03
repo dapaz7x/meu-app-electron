@@ -3,7 +3,7 @@ import { Order, PrinterConfig } from '../types';
 
 class PrinterService {
   /**
-   * Layout de impressão para Elgin i8 (80mm)
+   * Layout de impressão para impressora térmica 80mm
    */
   static printOrder(order: Order, config: PrinterConfig, isMerge: boolean = false) {
     console.log(config.mode === 'network'
@@ -24,14 +24,14 @@ class PrinterService {
           <div style="background: white; color: black; border: 4px solid black; padding: 3px; margin-bottom: 5px;">
             <div style="font-size: 16pt; font-weight: 900; line-height: 1;">COMANDA</div>
             <div style="font-size: 40pt; font-weight: 900; line-height: 1;">${order.comanda}</div>
-            ${isMerge ? '<h2 style="font-size: 10pt; margin: 3px 0 0; border-top: 2px solid black;">ADICIONAL / ALTERAÇÃO</h2>' : ''}
+            ${isMerge ? '<h2 style="font-size: 10pt; margin: 3px 0 0; border-top: 2px solid black;">NOVO PEDIDO</h2>' : ''}
           </div>
           <p style="margin: 8px 0 12px; font-size: 15pt; font-weight: 900;">${formattedDateTime}</p>
         </center>
         
         <hr style="border: 2px dashed black; margin: 10px 0;">
         
-        ${order.entries.map((entry, eIdx) => `
+        ${order.entries.map(entry => `
           <div style="margin-bottom: 6px; border: ${entry.quantity > 1 ? '3px solid black' : 'none'}; padding: ${entry.quantity > 1 ? '5px' : '0'};">
             <div style="display: flex; justify-content: space-between; align-items: center;">
               <h2 style="font-size: 22pt; margin: 0; text-transform: uppercase;">${entry.item.name}</h2>
@@ -42,6 +42,12 @@ class PrinterService {
               <div style="margin-top: 10px; padding-left: 10px; border-top: 1px dotted #888;">
                 ${entry.quantity > 1 ? `<p style="font-size: 12pt; margin: 2px 0; font-weight: bold;">[ITEM ${idx + 1}]</p>` : ''}
                 
+                ${cfg.flavor ? `
+                  <div style="margin: 6px 0; padding: 5px; border: 2px solid black;">
+                    <p style="font-size: 18pt; margin: 0; font-weight: 900;">SABOR: ${cfg.flavor.toUpperCase()}</p>
+                  </div>
+                ` : ''}
+
                 ${cfg.cheese ? `<p style="font-size: 14pt; margin: 2px 0;">QUEIJO: <strong>${cfg.cheese.toUpperCase()}</strong></p>` : ''}
                 
                 ${cfg.selectedAddOns.length > 0 ? `
@@ -128,7 +134,7 @@ class PrinterService {
       `${order.comanda}\n`,
       [GS, 0x21, 0x00],
       [ESC, 0x45, 0x00],
-      isMerge ? 'ADICIONAL / ALTERACAO\n' : '',
+      isMerge ? 'NOVO PEDIDO\n' : '',
       [ESC, 0x45, 0x01],
       [GS, 0x21, 0x01],
       `${formattedDateTime}\n`,
@@ -150,6 +156,17 @@ class PrinterService {
         if (entry.quantity > 1) {
           chunks.push(`[ITEM ${index + 1}]\n`);
           bodyLines += 1;
+        }
+        if (cfg.flavor) {
+          chunks.push(
+            [ESC, 0x45, 0x01],
+            [GS, 0x21, 0x01],
+            `SABOR: ${cfg.flavor.toUpperCase()}\n`,
+            [GS, 0x21, 0x00],
+            [ESC, 0x45, 0x00],
+            '\n'
+          );
+          bodyLines += 3;
         }
         if (cfg.cheese) {
           chunks.push(
