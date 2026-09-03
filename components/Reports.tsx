@@ -23,7 +23,7 @@ const Reports: React.FC<ReportsProps> = ({ orders, onClose }) => {
   }, {} as Record<string, number>);
 
   const chartData = Object.entries(itemCounts)
-    .map(([name, count]) => ({ name, count }))
+    .map(([name, count]) => ({ name, count: Number(count) }))
     .sort((a, b) => b.count - a.count)
     .slice(0, 10);
 
