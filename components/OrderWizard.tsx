@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { MenuItem, AddOn, OrderStatus, OrderItemConfig } from '../types';
-import { MENU_ITEMS, SALTY_ADDONS, SWEET_ADDONS, CHEESE_OPTIONS } from '../constants';
+import { MenuItem, AddOn, OrderItemConfig } from '../types';
+import { MENU_ITEMS, SALTY_ADDONS, SWEET_ADDONS, CHEESE_OPTIONS, PASTEL_FLAVORS } from '../constants';
 
 interface OrderWizardProps {
   comanda: string;
@@ -9,7 +9,7 @@ interface OrderWizardProps {
   onFinish: (item: MenuItem, quantity: number, configs: OrderItemConfig[]) => void;
 }
 
-type WizardStep = 'SELECT_ITEM' | 'ADDONS' | 'OBS';
+type WizardStep = 'SELECT_ITEM' | 'ADDONS' | 'FLAVOR' | 'OBS';
 
 const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }) => {
   const [step, setStep] = useState<WizardStep>('SELECT_ITEM');
@@ -18,9 +18,9 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }
   const [currentUnitIndex, setCurrentUnitIndex] = useState<number>(0);
   const [accumulatedConfigs, setAccumulatedConfigs] = useState<OrderItemConfig[]>([]);
 
-  // Current unit transient state
   const [selectedAddOns, setSelectedAddOns] = useState<AddOn[]>([]);
   const [selectedCheese, setSelectedCheese] = useState<string>('Nenhum');
+  const [selectedFlavor, setSelectedFlavor] = useState<string>('');
   const [observation, setObservation] = useState('');
   
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -31,9 +31,13 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }
     }
   }, [step, currentUnitIndex]);
 
+  const isPastel = selectedItem?.category === 'PASTEL';
+  const isBurger = selectedItem?.category === 'BURGER';
+
   const handleItemSelect = (item: MenuItem) => {
     setSelectedItem(item);
-    setStep('ADDONS');
+    setSelectedFlavor('');
+    setStep(item.category === 'PASTEL' ? 'FLAVOR' : 'ADDONS');
   };
 
   const toggleAddOn = (addon: AddOn) => {
@@ -48,6 +52,7 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }
     const newConfig: OrderItemConfig = {
       selectedAddOns,
       cheese: selectedCheese !== 'Nenhum' ? selectedCheese : undefined,
+      flavor: isPastel ? selectedFlavor : undefined,
       observation
     };
     
@@ -56,16 +61,13 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }
     if (currentUnitIndex + 1 < quantity) {
       setAccumulatedConfigs(newAccumulated);
       setCurrentUnitIndex(prev => prev + 1);
-      // Reset state for next unit
       setSelectedAddOns([]);
       setSelectedCheese('Nenhum');
+      setSelectedFlavor('');
       setObservation('');
-      setStep('ADDONS');
-    } else {
-      // Finalized all units
-      if (selectedItem) {
-        onFinish(selectedItem, quantity, newAccumulated);
-      }
+      setStep(isPastel ? 'FLAVOR' : 'ADDONS');
+    } else if (selectedItem) {
+      onFinish(selectedItem, quantity, newAccumulated);
     }
   };
 
@@ -73,7 +75,7 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }
     ? [...SALTY_ADDONS, ...SWEET_ADDONS] 
     : SALTY_ADDONS;
 
-  const isBurger = selectedItem?.category === 'BURGER';
+  const middleStepActive = step === 'ADDONS' || step === 'FLAVOR';
 
   return (
     <div className="h-full flex flex-col bg-white">
@@ -87,9 +89,9 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }
                 ITEM
             </div>
             <i className="fa-solid fa-chevron-right text-slate-100"></i>
-            <div className={`flex items-center gap-3 font-black text-xl transition-all ${step === 'ADDONS' ? 'text-[#E53935]' : 'text-slate-200'}`}>
-                <span className={`w-10 h-10 rounded-full border-4 flex items-center justify-center text-base ${step === 'ADDONS' ? 'border-[#E53935]' : 'border-slate-100'}`}>2</span>
-                EXTRAS
+            <div className={`flex items-center gap-3 font-black text-xl transition-all ${middleStepActive ? 'text-[#E53935]' : 'text-slate-200'}`}>
+                <span className={`w-10 h-10 rounded-full border-4 flex items-center justify-center text-base ${middleStepActive ? 'border-[#E53935]' : 'border-slate-100'}`}>2</span>
+                {isPastel ? 'SABOR' : 'EXTRAS'}
             </div>
             <i className="fa-solid fa-chevron-right text-slate-100"></i>
             <div className={`flex items-center gap-3 font-black text-xl transition-all ${step === 'OBS' ? 'text-[#E53935]' : 'text-slate-200'}`}>
@@ -127,6 +129,29 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }
                      <i className={`${item.icon} text-5xl`}></i>
                   </div>
                   <span className="text-xl font-black uppercase text-slate-800 tracking-tight leading-tight">{item.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {step === 'FLAVOR' && (
+          <div className="max-w-5xl mx-auto">
+            <h2 className="text-4xl font-black mb-4 uppercase text-slate-900 flex items-center gap-4">
+              <div className="w-12 h-12 bg-[#C5A021] rounded-full flex items-center justify-center text-white">
+                <i className="fa-solid fa-utensils text-xl"></i>
+              </div>
+              Escolha o sabor {quantity > 1 ? `(Unidade ${currentUnitIndex + 1})` : ''}
+            </h2>
+            <p className="text-lg font-bold text-slate-400 mb-10 uppercase">Pastel Frito</p>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+              {PASTEL_FLAVORS.map(flavor => (
+                <button
+                  key={flavor}
+                  onClick={() => setSelectedFlavor(flavor)}
+                  className={`min-h-32 p-8 rounded-3xl border-4 text-2xl font-black uppercase transition-all text-center ${selectedFlavor === flavor ? 'border-[#C5A021] bg-[#C5A021] text-white shadow-xl scale-[1.02]' : 'border-slate-100 bg-white text-slate-700 shadow-sm hover:border-[#C5A021]'}`}
+                >
+                  {flavor}
                 </button>
               ))}
             </div>
@@ -181,6 +206,11 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }
             <h2 className="text-4xl font-black mb-4 uppercase text-slate-900">
                Observações {quantity > 1 ? `(Unidade ${currentUnitIndex + 1})` : ''}
             </h2>
+            {isPastel && selectedFlavor && (
+              <div className="mb-4 bg-amber-50 border-2 border-amber-200 rounded-2xl px-6 py-4 text-xl font-black uppercase text-amber-900">
+                Sabor: {selectedFlavor}
+              </div>
+            )}
             <textarea
               value={observation}
               onChange={(e) => setObservation(e.target.value)}
@@ -219,6 +249,16 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }
                 </div>
             )}
         </div>
+
+        {step === 'FLAVOR' && (
+          <button 
+            onClick={() => setStep('OBS')}
+            disabled={!selectedFlavor}
+            className="bg-[#E53935] disabled:bg-slate-200 disabled:text-slate-400 text-white px-20 py-6 rounded-2xl text-2xl font-black uppercase shadow-xl active:scale-95 transition-all flex items-center gap-4"
+          >
+            PRÓXIMO <i className="fa-solid fa-arrow-right"></i>
+          </button>
+        )}
 
         {step === 'ADDONS' && (
           <button 
