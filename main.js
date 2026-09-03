@@ -10,7 +10,10 @@ const { promisify } = require("util");
 const execFileAsync = promisify(execFile);
 const ORDER_SERVER_PORT = 37842;
 const UPDATE_INTERVAL_MS = 10 * 60 * 1000;
+const FINALIZING_RECOVERY_MS = 5000;
 let orderServer;
+let lastClientSeenAt = null;
+let lastClientIp = "";
 
 function printLogPath() {
   return path.join(app.getPath("userData"), "impressao.log");
@@ -40,7 +43,28 @@ function networkConfigPath() {
 function readOrdersFile() {
   try {
     const value = JSON.parse(fs.readFileSync(ordersPath(), "utf8"));
-    return Array.isArray(value) ? value : [];
+    if (!Array.isArray(value)) return [];
+
+    const now = Date.now();
+    let changed = false;
+    const normalized = value.map(order => {
+      if (!order || order.status !== "FINALIZANDO...") return order;
+      const finalizingAt = Number(order.finalizingAt || 0);
+      if (!finalizingAt || now - finalizingAt >= FINALIZING_RECOVERY_MS) {
+        changed = true;
+        return {
+          ...order,
+          status: "FINALIZADO",
+          finishedAt: Number(order.finishedAt || now)
+        };
+      }
+      return order;
+    });
+
+    if (changed) {
+      fs.writeFileSync(ordersPath(), JSON.stringify(normalized, null, 2), "utf8");
+    }
+    return normalized;
   } catch {
     return [];
   }
@@ -68,6 +92,18 @@ function localIpv4Addresses() {
     .flat()
     .filter(address => address && address.family === "IPv4" && !address.internal)
     .map(address => address.address);
+}
+
+function normalizeRemoteIp(value) {
+  return String(value || "").replace(/^::ffff:/, "");
+}
+
+function noteRemoteComputer(request) {
+  const remoteIp = normalizeRemoteIp(request.socket?.remoteAddress);
+  if (!remoteIp || remoteIp === "127.0.0.1" || remoteIp === "::1") return;
+  if (localIpv4Addresses().includes(remoteIp)) return;
+  lastClientIp = remoteIp;
+  lastClientSeenAt = Date.now();
 }
 
 function jsonResponse(response, status, body) {
@@ -98,6 +134,7 @@ function readJsonBody(request) {
 
 async function handleOrderRequest(request, response) {
   try {
+    noteRemoteComputer(request);
     const url = new URL(request.url, "http://localhost");
     if (request.method === "GET" && url.pathname === "/health") {
       return jsonResponse(response, 200, { ok: true, app: "gestor-chapa", version: app.getVersion() });
@@ -200,21 +237,107 @@ ipcMain.handle("save-network-config", async (_event, payload) => {
   if (!Number.isInteger(port) || port < 1024 || port > 65535) {
     throw new Error("A porta da sincronização é inválida.");
   }
-  if (mode === "client") {
-    if (!net.isIP(serverIp)) throw new Error("Informe o IP do computador principal.");
-    await remoteOrderRequest({ serverIp, port }, "/health");
-    const localOrders = readOrdersFile();
-    if (localOrders.length) {
-      await remoteOrderRequest({ serverIp, port }, "/orders/import", {
-        method: "POST",
-        body: JSON.stringify({ orders: localOrders })
-      });
-    }
+  if (mode === "client" && !net.isIP(serverIp)) {
+    throw new Error("Informe o IP do computador principal.");
   }
+
   const config = { mode, serverIp, port };
   fs.writeFileSync(networkConfigPath(), JSON.stringify(config, null, 2), "utf8");
-  await startOrderServer(config);
-  return { ...config, localIps: localIpv4Addresses() };
+
+  let connectionOk = true;
+  let connectionError = "";
+  try {
+    await startOrderServer(config);
+    if (mode === "client") {
+      await remoteOrderRequest({ serverIp, port }, "/health");
+      const localOrders = readOrdersFile();
+      if (localOrders.length) {
+        await remoteOrderRequest({ serverIp, port }, "/orders/import", {
+          method: "POST",
+          body: JSON.stringify({ orders: localOrders })
+        });
+      }
+    }
+  } catch (error) {
+    connectionOk = false;
+    connectionError = error instanceof Error ? error.message : String(error);
+  }
+
+  return {
+    ...config,
+    localIps: localIpv4Addresses(),
+    connectionOk,
+    connectionError
+  };
+});
+
+ipcMain.handle("check-network-link", async () => {
+  const config = readNetworkConfig();
+  const localIps = localIpv4Addresses();
+  if (config.mode === "host") {
+    const serverListening = Boolean(orderServer?.listening);
+    const peerConnected = Boolean(lastClientSeenAt && Date.now() - lastClientSeenAt < 15000);
+    return {
+      ok: serverListening && peerConnected,
+      mode: "host",
+      localIps,
+      serverIp: "",
+      port: config.port,
+      serverListening,
+      peerConnected,
+      peerIp: lastClientIp,
+      lastPeerSeenAt: lastClientSeenAt,
+      message: !serverListening
+        ? `O servidor do PC principal não está escutando na porta ${config.port}.`
+        : peerConnected
+          ? `Comunicação ativa com o PC secundário ${lastClientIp}.`
+          : `Servidor ativo na porta ${config.port}, mas nenhum PC secundário foi visto nos últimos 15 segundos.`
+    };
+  }
+
+  if (config.mode === "client") {
+    if (!net.isIP(config.serverIp)) {
+      return {
+        ok: false,
+        mode: "client",
+        localIps,
+        serverIp: config.serverIp,
+        port: config.port,
+        message: "O IP do PC principal não está configurado corretamente."
+      };
+    }
+    const startedAt = Date.now();
+    try {
+      await remoteOrderRequest(config, "/health");
+      return {
+        ok: true,
+        mode: "client",
+        localIps,
+        serverIp: config.serverIp,
+        port: config.port,
+        latencyMs: Date.now() - startedAt,
+        message: `PC principal ${config.serverIp}:${config.port} respondeu normalmente.`
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        mode: "client",
+        localIps,
+        serverIp: config.serverIp,
+        port: config.port,
+        message: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  return {
+    ok: false,
+    mode: "local",
+    localIps,
+    serverIp: "",
+    port: config.port,
+    message: "Este computador está configurado como uso local. Selecione PC principal ou PC secundário."
+  };
 });
 
 ipcMain.handle("orders-list", () => ordersOperation(readOrdersFile, "/orders"));
