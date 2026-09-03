@@ -6,7 +6,9 @@ class PrinterService {
    * Layout de impressão para Elgin i8 (80mm)
    */
   static printOrder(order: Order, config: PrinterConfig, isMerge: boolean = false) {
-    console.log(`Printing to local Windows queue ${config.name}...`);
+    console.log(config.mode === 'network'
+      ? `Printing directly to ${config.printerIp}:${config.printerPort}...`
+      : `Printing to local Windows queue ${config.name}...`);
     const printedAt = new Date();
     const formattedDateTime = printedAt.toLocaleString('pt-BR', {
       day: '2-digit',
@@ -77,8 +79,8 @@ class PrinterService {
       <div class="thermal-print">
         <center>
           <h1 style="font-size: 20pt;">TESTE DE CONEXÃO</h1>
-          <p>EQUIPAMENTO: ${config.name}</p>
-          <p>CONEXÃO: USB LOCAL</p>
+          <p>EQUIPAMENTO: ${config.mode === 'network' ? config.printerIp : config.name}</p>
+          <p>CONEXÃO: ${config.mode === 'network' ? `REDE / PORTA ${config.printerPort}` : 'USB LOCAL'}</p>
           <hr style="border: 1px dashed black;">
           <p style="font-size: 16pt;">PRONTO PARA USO</p>
         </center>
@@ -209,6 +211,7 @@ class PrinterService {
       'TESTE DE CONEXAO\n',
       [GS, 0x21, 0x00], [ESC, 0x45, 0x00],
       `EQUIPAMENTO: ${config.name}\n`,
+      config.mode === 'network' ? `REDE: ${config.printerIp}:${config.printerPort}\n` : 'USB LOCAL\n',
       'IMPRESSAO RAW/ESC-POS\n',
       'PRONTO PARA USO\n',
       [ESC, 0x64, 0x04], [GS, 0x56, 0x00]
@@ -218,7 +221,13 @@ class PrinterService {
   private static async executeBrowserPrint(html: string, rawData: string, config: PrinterConfig) {
     try {
       if (window.electronAPI?.printReceipt) {
-        await window.electronAPI.printReceipt({ printerName: config.name, rawData });
+        await window.electronAPI.printReceipt({
+          printerName: config.name,
+          printerMode: config.mode,
+          printerIp: config.printerIp,
+          printerPort: config.printerPort,
+          rawData
+        });
       } else {
         const printElement = document.createElement('div');
         printElement.className = 'print-only';
