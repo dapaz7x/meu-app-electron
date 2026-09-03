@@ -163,7 +163,14 @@ const App: React.FC = () => {
     setOrders([...sourceOrders.filter(order => order.id !== orderToSave.id), orderToSave]);
     try {
       await window.electronAPI?.ordersSave(orderToSave);
-      PrinterService.printOrder(orderToSave, printerConfig, Boolean(existingOrder));
+
+      // O painel mantém o histórico completo da comanda, mas a impressão contém
+      // somente o item registrado nesta operação para evitar duplicidade na produção.
+      const orderToPrint: Order = {
+        ...orderToSave,
+        entries: [newEntry]
+      };
+      PrinterService.printOrder(orderToPrint, printerConfig, Boolean(existingOrder));
     } catch (error) {
       alert(error instanceof Error
         ? `O pedido apareceu nesta tela, mas não foi sincronizado: ${error.message}`
