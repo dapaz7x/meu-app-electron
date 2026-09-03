@@ -19,10 +19,11 @@ const App: React.FC = () => {
   const [printerConfig, setPrinterConfig] = useState<PrinterConfig>(() => {
     const saved = localStorage.getItem('araujo_printer');
     const parsed = saved ? JSON.parse(saved) : {};
+    const savedPrinterIp = String(parsed.printerIp || '').trim();
     return {
       name: parsed.name || 'POS-80',
       mode: parsed.mode === 'network' ? 'network' : 'usb',
-      printerIp: parsed.printerIp || '192.168.15.217',
+      printerIp: !savedPrinterIp || savedPrinterIp === '192.168.50.217' ? '192.168.15.217' : savedPrinterIp,
       printerPort: Number(parsed.printerPort || 9100)
     };
   });
@@ -136,7 +137,15 @@ const App: React.FC = () => {
       addedAt: Date.now()
     };
 
-    const existingOrder = orders.find(o => o.comanda === activeComanda && o.status !== OrderStatus.FINISHED);
+    let sourceOrders = orders;
+    try {
+      const sharedOrders = await window.electronAPI?.ordersList();
+      if (Array.isArray(sharedOrders)) sourceOrders = sharedOrders;
+    } catch (error) {
+      console.error('Não foi possível atualizar os pedidos antes de salvar:', error);
+    }
+
+    const existingOrder = sourceOrders.find(o => o.comanda === activeComanda && o.status !== OrderStatus.FINISHED);
     const orderToSave: Order = existingOrder ? {
       ...existingOrder,
       entries: [...existingOrder.entries, newEntry],
@@ -149,7 +158,7 @@ const App: React.FC = () => {
       createdAt: Date.now()
     };
 
-    setOrders(prev => [...prev.filter(order => order.id !== orderToSave.id), orderToSave]);
+    setOrders([...sourceOrders.filter(order => order.id !== orderToSave.id), orderToSave]);
     try {
       await window.electronAPI?.ordersSave(orderToSave);
       PrinterService.printOrder(orderToSave, printerConfig, Boolean(existingOrder));
