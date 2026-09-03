@@ -25,6 +25,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { id: '19', name: 'X Burguer Araújo', category: 'BURGER', icon: 'fa-solid fa-burger' },
   { id: '20', name: 'Duplo Cheddar Araújo', category: 'BURGER', icon: 'fa-solid fa-burger' },
   { id: '21', name: 'Batata Frita', category: 'LANCHE', icon: 'fa-solid fa-bowl-food' },
+  { id: '22', name: 'Pastel Frito', category: 'PASTEL', icon: 'fa-solid fa-utensils' },
 ];
 
 export const SALTY_ADDONS: AddOn[] = [
@@ -61,3 +62,12 @@ export const SWEET_ADDONS: AddOn[] = [
 ];
 
 export const CHEESE_OPTIONS = ['Catupiry', 'Cheddar', 'Nenhum'];
+
+export const PASTEL_FLAVORS = [
+  'Carne',
+  'Queijo',
+  'Pizza',
+  'Banana com Canela',
+  'Frango c/ Catupiry',
+  'Alho Poró',
+];
