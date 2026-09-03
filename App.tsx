@@ -22,7 +22,7 @@ const App: React.FC = () => {
     return {
       name: parsed.name || 'POS-80',
       mode: parsed.mode === 'network' ? 'network' : 'usb',
-      printerIp: parsed.printerIp || '192.168.50.217',
+      printerIp: parsed.printerIp || '192.168.15.217',
       printerPort: Number(parsed.printerPort || 9100)
     };
   });
