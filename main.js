@@ -11,7 +11,10 @@ const execFileAsync = promisify(execFile);
 const ORDER_SERVER_PORT = 37842;
 const UPDATE_INTERVAL_MS = 10 * 60 * 1000;
 const FINALIZING_RECOVERY_MS = 5000;
+const ORDER_SERVER_WATCHDOG_MS = 3000;
 let orderServer;
+let orderServerPort = null;
+let orderServerLastError = "";
 let lastClientSeenAt = null;
 let lastClientIp = "";
 
@@ -174,23 +177,116 @@ async function handleOrderRequest(request, response) {
 function stopOrderServer() {
   const currentServer = orderServer;
   orderServer = undefined;
+  orderServerPort = null;
   if (!currentServer) return Promise.resolve();
-  return new Promise(resolve => currentServer.close(resolve));
+  return new Promise(resolve => {
+    try {
+      currentServer.close(() => resolve());
+    } catch {
+      resolve();
+    }
+  });
 }
 
 async function startOrderServer(config = readNetworkConfig()) {
   await stopOrderServer();
-  if (config.mode !== "host") return Promise.resolve();
+  if (config.mode !== "host") return false;
+
+  const port = Number(config.port || ORDER_SERVER_PORT);
+  orderServerLastError = "";
+
   return new Promise((resolve, reject) => {
     const server = http.createServer(handleOrderRequest);
-    server.once("error", reject);
-    server.listen(config.port, "0.0.0.0", () => {
-      server.removeListener("error", reject);
-      server.on("error", error => writePrintLog(`ERRO NO SERVIDOR DE PEDIDOS: ${error.message}`));
+
+    const failBeforeListening = error => {
+      orderServerLastError = error instanceof Error ? error.message : String(error);
+      writePrintLog(`ERRO AO INICIAR SERVIDOR DE PEDIDOS: ${orderServerLastError}`);
+      reject(error);
+    };
+
+    server.once("error", failBeforeListening);
+    server.listen(port, "0.0.0.0", () => {
+      server.removeListener("error", failBeforeListening);
       orderServer = server;
-      resolve();
+      orderServerPort = port;
+      writePrintLog(`Servidor de pedidos ATIVO em 0.0.0.0:${port}.`);
+
+      server.on("error", error => {
+        orderServerLastError = error instanceof Error ? error.message : String(error);
+        writePrintLog(`ERRO NO SERVIDOR DE PEDIDOS: ${orderServerLastError}`);
+      });
+      server.on("close", () => {
+        if (orderServer === server) {
+          orderServer = undefined;
+          orderServerPort = null;
+        }
+      });
+      resolve(true);
     });
   });
+}
+
+async function ensureOrderServer(config = readNetworkConfig()) {
+  if (config.mode !== "host") {
+    if (orderServer) await stopOrderServer();
+    return false;
+  }
+
+  const expectedPort = Number(config.port || ORDER_SERVER_PORT);
+  if (orderServer?.listening && orderServerPort === expectedPort) return true;
+
+  try {
+    await startOrderServer({ ...config, port: expectedPort });
+    return Boolean(orderServer?.listening);
+  } catch (error) {
+    orderServerLastError = error instanceof Error ? error.message : String(error);
+    return false;
+  }
+}
+
+function probeTcp(host, port, timeoutMs = 3000) {
+  return new Promise(resolve => {
+    const startedAt = Date.now();
+    const socket = net.createConnection({ host, port });
+    let finished = false;
+
+    const done = result => {
+      if (finished) return;
+      finished = true;
+      socket.destroy();
+      resolve({ latencyMs: Date.now() - startedAt, ...result });
+    };
+
+    const timer = setTimeout(() => {
+      done({ ok: false, code: "ETIMEDOUT", message: "Tempo esgotado ao tentar abrir a porta." });
+    }, timeoutMs);
+
+    socket.once("connect", () => {
+      clearTimeout(timer);
+      done({ ok: true, code: "CONNECTED", message: "Porta TCP acessível." });
+    });
+    socket.once("error", error => {
+      clearTimeout(timer);
+      done({
+        ok: false,
+        code: String(error?.code || "ERROR"),
+        message: error instanceof Error ? error.message : String(error)
+      });
+    });
+  });
+}
+
+function describeTcpFailure(probe, host, port) {
+  if (probe.code === "ECONNREFUSED") {
+    return `CONEXÃO RECUSADA em ${host}:${port}. O computador foi encontrado, mas o Gestor no PC principal não abriu a porta ${port}.`;
+  }
+  if (probe.code === "ETIMEDOUT") {
+    return `TIMEOUT em ${host}:${port}. A tentativa não chegou ao Gestor do PC principal. Verifique Firewall, antivírus ou isolamento da rede.`;
+  }
+  if (probe.code === "EHOSTUNREACH" || probe.code === "ENETUNREACH") {
+    return `PC principal ${host} não alcançável pela rede. Confirme se os dois computadores estão na mesma rede.`;
+  }
+  return `Falha TCP em ${host}:${port}: ${probe.message || probe.code}.`;
 }
 
 async function remoteOrderRequest(config, route, options = {}) {
@@ -225,20 +321,29 @@ function createWindow() {
   win.loadFile(path.join(__dirname, "dist/index.html"));
 }
 
-ipcMain.handle("get-network-config", async () => ({
-  ...readNetworkConfig(),
-  localIps: localIpv4Addresses()
-}));
+ipcMain.handle("get-network-config", async () => {
+  const config = readNetworkConfig();
+  if (config.mode === "host") await ensureOrderServer(config);
+  return {
+    ...config,
+    localIps: localIpv4Addresses()
+  };
+});
 
 ipcMain.handle("save-network-config", async (_event, payload) => {
   const mode = ["local", "host", "client"].includes(payload?.mode) ? payload.mode : "local";
   const port = Number(payload?.port || ORDER_SERVER_PORT);
   const serverIp = String(payload?.serverIp || "").trim();
+  const localIps = localIpv4Addresses();
+
   if (!Number.isInteger(port) || port < 1024 || port > 65535) {
     throw new Error("A porta da sincronização é inválida.");
   }
   if (mode === "client" && !net.isIP(serverIp)) {
     throw new Error("Informe o IP do computador principal.");
+  }
+  if (mode === "client" && localIps.includes(serverIp)) {
+    throw new Error(`O IP ${serverIp} pertence a ESTE computador. No PC secundário, informe o IP do OUTRO computador que foi definido como principal.`);
   }
 
   const config = { mode, serverIp, port };
@@ -246,26 +351,48 @@ ipcMain.handle("save-network-config", async (_event, payload) => {
 
   let connectionOk = true;
   let connectionError = "";
-  try {
-    await startOrderServer(config);
-    if (mode === "client") {
-      await remoteOrderRequest({ serverIp, port }, "/health");
-      const localOrders = readOrdersFile();
-      if (localOrders.length) {
-        await remoteOrderRequest({ serverIp, port }, "/orders/import", {
-          method: "POST",
-          body: JSON.stringify({ orders: localOrders })
-        });
+
+  if (mode === "host") {
+    const started = await ensureOrderServer(config);
+    if (!started) {
+      connectionOk = false;
+      connectionError = `Não foi possível abrir a porta ${port} no PC principal${orderServerLastError ? `: ${orderServerLastError}` : "."}`;
+    } else {
+      const localProbe = await probeTcp("127.0.0.1", port, 1500);
+      if (!localProbe.ok) {
+        connectionOk = false;
+        connectionError = `O servidor foi iniciado, mas a porta ${port} não respondeu localmente: ${localProbe.message}`;
       }
     }
-  } catch (error) {
-    connectionOk = false;
-    connectionError = error instanceof Error ? error.message : String(error);
+  } else {
+    await stopOrderServer();
+  }
+
+  if (mode === "client") {
+    const tcpProbe = await probeTcp(serverIp, port, 3000);
+    if (!tcpProbe.ok) {
+      connectionOk = false;
+      connectionError = describeTcpFailure(tcpProbe, serverIp, port);
+    } else {
+      try {
+        await remoteOrderRequest({ serverIp, port }, "/health");
+        const localOrders = readOrdersFile();
+        if (localOrders.length) {
+          await remoteOrderRequest({ serverIp, port }, "/orders/import", {
+            method: "POST",
+            body: JSON.stringify({ orders: localOrders })
+          });
+        }
+      } catch (error) {
+        connectionOk = false;
+        connectionError = `A porta ${port} abriu, mas o Gestor do PC principal não respondeu corretamente: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
   }
 
   return {
     ...config,
-    localIps: localIpv4Addresses(),
+    localIps,
     connectionOk,
     connectionError
   };
@@ -274,11 +401,13 @@ ipcMain.handle("save-network-config", async (_event, payload) => {
 ipcMain.handle("check-network-link", async () => {
   const config = readNetworkConfig();
   const localIps = localIpv4Addresses();
+
   if (config.mode === "host") {
+    await ensureOrderServer(config);
     const serverListening = Boolean(orderServer?.listening);
     const peerConnected = Boolean(lastClientSeenAt && Date.now() - lastClientSeenAt < 15000);
     return {
-      ok: serverListening && peerConnected,
+      ok: serverListening,
       mode: "host",
       localIps,
       serverIp: "",
@@ -288,10 +417,10 @@ ipcMain.handle("check-network-link", async () => {
       peerIp: lastClientIp,
       lastPeerSeenAt: lastClientSeenAt,
       message: !serverListening
-        ? `O servidor do PC principal não está escutando na porta ${config.port}.`
+        ? `Falha local: a porta ${config.port} não abriu no PC principal${orderServerLastError ? `. Motivo: ${orderServerLastError}` : "."}`
         : peerConnected
-          ? `Comunicação ativa com o PC secundário ${lastClientIp}.`
-          : `Servidor ativo na porta ${config.port}, mas nenhum PC secundário foi visto nos últimos 15 segundos.`
+          ? `Servidor principal ativo e comunicação recente com o PC secundário ${lastClientIp}.`
+          : `Servidor principal PRONTO na porta ${config.port}. Aguardando o PC secundário conectar.`
     };
   }
 
@@ -306,6 +435,30 @@ ipcMain.handle("check-network-link", async () => {
         message: "O IP do PC principal não está configurado corretamente."
       };
     }
+    if (localIps.includes(config.serverIp)) {
+      return {
+        ok: false,
+        mode: "client",
+        localIps,
+        serverIp: config.serverIp,
+        port: config.port,
+        message: `Configuração incorreta: ${config.serverIp} é o IP deste próprio computador. Informe o IP do OUTRO PC, que deve estar configurado como principal.`
+      };
+    }
+
+    const tcpProbe = await probeTcp(config.serverIp, config.port, 3000);
+    if (!tcpProbe.ok) {
+      return {
+        ok: false,
+        mode: "client",
+        localIps,
+        serverIp: config.serverIp,
+        port: config.port,
+        latencyMs: tcpProbe.latencyMs,
+        message: describeTcpFailure(tcpProbe, config.serverIp, config.port)
+      };
+    }
+
     const startedAt = Date.now();
     try {
       await remoteOrderRequest(config, "/health");
@@ -325,7 +478,7 @@ ipcMain.handle("check-network-link", async () => {
         localIps,
         serverIp: config.serverIp,
         port: config.port,
-        message: error instanceof Error ? error.message : String(error)
+        message: `A porta está acessível, mas a resposta do Gestor falhou: ${error instanceof Error ? error.message : String(error)}`
       };
     }
   }
@@ -519,9 +672,19 @@ autoUpdater.on("download-progress", progress => {
 
 app.whenReady().then(() => {
   createWindow();
-  startOrderServer().catch(error => {
+  ensureOrderServer().catch(error => {
     dialog.showErrorBox("Rede do Gestor de Chapa", `Não foi possível iniciar o compartilhamento: ${error.message}`);
   });
+
+  setInterval(() => {
+    const config = readNetworkConfig();
+    if (config.mode === "host" && !orderServer?.listening) {
+      ensureOrderServer(config).catch(error => {
+        orderServerLastError = error instanceof Error ? error.message : String(error);
+      });
+    }
+  }, ORDER_SERVER_WATCHDOG_MS);
+
   setTimeout(checkForUpdates, 5000);
   setInterval(checkForUpdates, UPDATE_INTERVAL_MS);
 });
