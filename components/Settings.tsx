@@ -96,10 +96,15 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, onClose }) => {
                 className="w-full pl-14 pr-6 py-6 border-4 border-slate-50 rounded-2xl text-2xl font-black focus:outline-none focus:border-[#E53935] transition-all"
                 placeholder="Ex: Impressora Chapa 01"
               />
-            </div> : <div className="grid grid-cols-[1fr_180px] gap-3">
-              <input value={printerIp} onChange={e => setPrinterIp(e.target.value)} className="px-6 py-5 border-4 border-slate-100 rounded-2xl text-xl font-black focus:outline-none focus:border-[#E53935]" placeholder="192.168.50.217" />
-              <input type="number" value={printerPort} onChange={e => setPrinterPort(Number(e.target.value))} className="px-6 py-5 border-4 border-slate-100 rounded-2xl text-xl font-black focus:outline-none focus:border-[#E53935]" placeholder="9100" />
-            </div>}
+            </div> : <>
+              <div className="grid grid-cols-[1fr_180px] gap-3">
+                <input value={printerIp} onChange={e => setPrinterIp(e.target.value)} className="px-6 py-5 border-4 border-slate-100 rounded-2xl text-xl font-black focus:outline-none focus:border-[#E53935]" placeholder="192.168.15.217" />
+                <input type="number" value={printerPort} onChange={e => setPrinterPort(Number(e.target.value))} className="px-6 py-5 border-4 border-slate-100 rounded-2xl text-xl font-black focus:outline-none focus:border-[#E53935]" placeholder="9100" />
+              </div>
+              <div className="rounded-xl bg-red-50 border-2 border-red-100 p-4 text-red-900 font-bold text-sm">
+                Impressora da chapa: <strong>192.168.15.217</strong>. No segundo PC, use também <strong>Rede / IP</strong> com o mesmo endereço. A impressão é enviada diretamente pela rede, sem depender da fila USB do outro computador.
+              </div>
+            </>}
           </div>
 
           <div className="border-t-4 border-slate-100 pt-6 space-y-4">
@@ -121,13 +126,19 @@ const Settings: React.FC<SettingsProps> = ({ config, onSave, onClose }) => {
             {network.mode === 'host' && (
               <div className="rounded-xl bg-emerald-50 border-2 border-emerald-200 p-4 text-emerald-800 font-bold">
                 IP deste PC: <strong>{network.localIps?.join(' ou ') || 'será exibido após salvar'}</strong> — porta {network.port}
+                <div className="mt-2 text-sm">Se o Firewall do Windows solicitar permissão, permita o Gestor de Chapa em <strong>redes privadas</strong>.</div>
               </div>
             )}
             {network.mode === 'client' && (
-              <div className="grid grid-cols-[1fr_180px] gap-3">
-                <input value={network.serverIp} onChange={e => setNetwork(current => ({ ...current, serverIp: e.target.value }))} className="px-6 py-4 border-4 border-slate-100 rounded-xl text-xl font-black focus:outline-none focus:border-[#C5A021]" placeholder="IP do PC principal" />
-                <input type="number" value={network.port} onChange={e => setNetwork(current => ({ ...current, port: Number(e.target.value) }))} className="px-6 py-4 border-4 border-slate-100 rounded-xl text-xl font-black focus:outline-none focus:border-[#C5A021]" />
-              </div>
+              <>
+                <div className="grid grid-cols-[1fr_180px] gap-3">
+                  <input value={network.serverIp} onChange={e => setNetwork(current => ({ ...current, serverIp: e.target.value }))} className="px-6 py-4 border-4 border-slate-100 rounded-xl text-xl font-black focus:outline-none focus:border-[#C5A021]" placeholder="IP do PC principal" />
+                  <input type="number" value={network.port} onChange={e => setNetwork(current => ({ ...current, port: Number(e.target.value) }))} className="px-6 py-4 border-4 border-slate-100 rounded-xl text-xl font-black focus:outline-none focus:border-[#C5A021]" />
+                </div>
+                <div className="rounded-xl bg-amber-50 border-2 border-amber-200 p-4 text-amber-900 font-bold text-sm">
+                  Ao gravar, o aplicativo testa a conexão com o PC principal. Depois disso, pedidos e mudanças de status aparecem automaticamente nos dois computadores.
+                </div>
+              </>
             )}
           </div>
 
