@@ -9,7 +9,7 @@ export enum OrderStatus {
 export interface MenuItem {
   id: string;
   name: string;
-  category: 'LANCHE' | 'BURGER' | 'TAPIOCA' | 'CREPIOCA';
+  category: 'LANCHE' | 'BURGER' | 'TAPIOCA' | 'CREPIOCA' | 'PASTEL';
   icon: string;
 }
 
@@ -22,6 +22,7 @@ export interface AddOn {
 export interface OrderItemConfig {
   selectedAddOns: AddOn[];
   cheese?: string;
+  flavor?: string;
   observation: string;
 }
 
@@ -58,22 +59,19 @@ export interface NetworkConfig {
   serverIp: string;
   port: number;
   localIps?: string[];
-  connectionOk?: boolean;
-  connectionError?: string;
 }
 
-export interface NetworkDiagnostics {
-  ok: boolean;
+export interface NetworkDiagnostic {
   mode: 'local' | 'host' | 'client';
   localIps: string[];
-  serverIp: string;
   port: number;
-  serverListening?: boolean;
-  peerConnected?: boolean;
-  peerIp?: string;
-  lastPeerSeenAt?: number | null;
-  latencyMs?: number;
-  message: string;
+  serverIp: string;
+  serverListening: boolean;
+  peerReachable: boolean | null;
+  responseMs?: number;
+  version?: string;
+  error?: string;
+  checkedAt: number;
 }
 
 declare global {
@@ -90,7 +88,7 @@ declare global {
       checkNetworkPrinter: (payload: { printerIp: string; printerPort: number }) => Promise<{ reachable: boolean }>;
       getNetworkConfig: () => Promise<NetworkConfig>;
       saveNetworkConfig: (config: NetworkConfig) => Promise<NetworkConfig>;
-      checkNetworkLink: () => Promise<NetworkDiagnostics>;
+      diagnoseNetwork: () => Promise<NetworkDiagnostic>;
       ordersList: () => Promise<Order[]>;
       ordersSave: (order: Order) => Promise<Order>;
       ordersImport: (orders: Order[]) => Promise<Order[]>;
