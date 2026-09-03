@@ -40,6 +40,7 @@ export interface Order {
   status: OrderStatus;
   createdAt: number;
   readyAt?: number;
+  finalizingAt?: number;
   finishedAt?: number;
 }
 
@@ -57,6 +58,22 @@ export interface NetworkConfig {
   serverIp: string;
   port: number;
   localIps?: string[];
+  connectionOk?: boolean;
+  connectionError?: string;
+}
+
+export interface NetworkDiagnostics {
+  ok: boolean;
+  mode: 'local' | 'host' | 'client';
+  localIps: string[];
+  serverIp: string;
+  port: number;
+  serverListening?: boolean;
+  peerConnected?: boolean;
+  peerIp?: string;
+  lastPeerSeenAt?: number | null;
+  latencyMs?: number;
+  message: string;
 }
 
 declare global {
@@ -73,6 +90,7 @@ declare global {
       checkNetworkPrinter: (payload: { printerIp: string; printerPort: number }) => Promise<{ reachable: boolean }>;
       getNetworkConfig: () => Promise<NetworkConfig>;
       saveNetworkConfig: (config: NetworkConfig) => Promise<NetworkConfig>;
+      checkNetworkLink: () => Promise<NetworkDiagnostics>;
       ordersList: () => Promise<Order[]>;
       ordersSave: (order: Order) => Promise<Order>;
       ordersImport: (orders: Order[]) => Promise<Order[]>;
