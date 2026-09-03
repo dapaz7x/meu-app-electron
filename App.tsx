@@ -23,7 +23,7 @@ const App: React.FC = () => {
     return {
       name: parsed.name || 'POS-80',
       mode: parsed.mode === 'network' ? 'network' : 'usb',
-      printerIp: !savedPrinterIp || savedPrinterIp === '192.168.50.217' ? '192.168.15.217' : savedPrinterIp,
+      printerIp: !savedPrinterIp || savedPrinterIp === '192.168.15.217' ? '192.168.50.217' : savedPrinterIp,
       printerPort: Number(parsed.printerPort || 9100)
     };
   });
@@ -81,7 +81,7 @@ const App: React.FC = () => {
       if (e.key === 'F1') {
         e.preventDefault();
         setView('REPORTS');
-      } else if (e.key === 'F2') {
+      } else if (e.ctrlKey && e.shiftKey && e.key === 'F12') {
         e.preventDefault();
         setView('SETTINGS');
       } else if (e.key === 'Escape') {
@@ -149,7 +149,9 @@ const App: React.FC = () => {
     const orderToSave: Order = existingOrder ? {
       ...existingOrder,
       entries: [...existingOrder.entries, newEntry],
-      status: OrderStatus.PREPARING
+      status: OrderStatus.PREPARING,
+      finalizingAt: undefined,
+      finishedAt: undefined
     } : {
       id: Math.random().toString(36).substr(2, 9),
       comanda: activeComanda || '000',
@@ -178,7 +180,7 @@ const App: React.FC = () => {
     if (!current) return;
 
     if (current.status === OrderStatus.PREPARING) {
-      const changes = { status: OrderStatus.READY, readyAt: Date.now() };
+      const changes = { status: OrderStatus.READY, readyAt: Date.now(), finalizingAt: undefined };
       setOrders(prev => prev.map(order => order.id === id ? { ...order, ...changes } : order));
       try {
         await window.electronAPI?.ordersStatus({ id, changes });
@@ -189,7 +191,7 @@ const App: React.FC = () => {
     }
 
     if (current.status === OrderStatus.READY) {
-      const finalizingChanges = { status: OrderStatus.FINALIZING };
+      const finalizingChanges = { status: OrderStatus.FINALIZING, finalizingAt: Date.now() };
       setOrders(prev => prev.map(order => order.id === id ? { ...order, ...finalizingChanges } : order));
       try {
         await window.electronAPI?.ordersStatus({ id, changes: finalizingChanges });
