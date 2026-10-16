@@ -1,14 +1,13 @@
 name: Publicar versão do Windows
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
     tags:
       - "v*"
-    paths:
-      - ".github/workflows/release.yml"
+
+concurrency:
+  group: windows-release
+  cancel-in-progress: false
 
 permissions:
   contents: write
@@ -29,12 +28,28 @@ jobs:
       - name: Instalar dependências
         run: npm ci
 
+      - name: Conferir versão da tag e dos pacotes
+        run: |
+          node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if (process.env.GITHUB_REF_NAME !== 'v'+p.version || l.version !== p.version || l.packages[''].version !== p.version) throw new Error('A tag e os arquivos de pacote devem ter a mesma versão');"
+
+      - name: Verificar TypeScript
+        run: npm run typecheck
+
+      - name: Testar pedidos, impressão e relatórios
+        run: npm test
+
       - name: Compilar aplicativo
         run: npm run build
+
+      - name: Preparar navegador de testes
+        run: npx playwright install chromium
+
+      - name: Testar interface
+        run: npm run test:ui
+        env:
+          PLAYWRIGHT_CHANNEL: chromium
 
       - name: Gerar instalador e publicar release
         run: npx electron-builder --win --x64 --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-# release 1.0.20

@@ -11,5 +11,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
   ordersSave: (order) => ipcRenderer.invoke("orders-save", order),
   ordersImport: (orders) => ipcRenderer.invoke("orders-import", orders),
   ordersStatus: (payload) => ipcRenderer.invoke("orders-status", payload),
+  reportsWeeks: () => ipcRenderer.invoke("reports-weeks"),
+  reportsWeek: (week) => ipcRenderer.invoke("reports-week", week),
+  reportsCancel: (payload) => ipcRenderer.invoke("reports-cancel", payload),
+  reportsOpenFolder: () => ipcRenderer.invoke("reports-open-folder"),
   getAppVersion: () => ipcRenderer.invoke("get-app-version")
 });

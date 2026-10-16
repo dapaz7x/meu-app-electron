@@ -32,12 +32,17 @@ export interface OrderEntry {
   quantity: number;
   configs: OrderItemConfig[];
   addedAt: number;
+  /** Observação da comanda no momento deste lançamento, preservada no histórico. */
+  orderObservation?: string;
 }
+
+export type OrderDraftEntry = Pick<OrderEntry, 'item' | 'quantity' | 'configs'>;
 
 export interface Order {
   id: string;
   comanda: string;
   entries: OrderEntry[];
+  observation?: string;
   status: OrderStatus;
   createdAt: number;
   readyAt?: number;
@@ -61,17 +66,54 @@ export interface NetworkConfig {
   localIps?: string[];
 }
 
-export interface NetworkDiagnostic {
+export interface NetworkDiagnostics {
+  ok: boolean;
   mode: 'local' | 'host' | 'client';
   localIps: string[];
   port: number;
   serverIp: string;
-  serverListening: boolean;
-  peerReachable: boolean | null;
-  responseMs?: number;
-  version?: string;
-  error?: string;
-  checkedAt: number;
+  serverListening?: boolean;
+  peerConnected?: boolean;
+  peerIp?: string;
+  lastPeerSeenAt?: number;
+  latencyMs?: number;
+  message: string;
+}
+
+export interface SaveNetworkConfigResult extends NetworkConfig {
+  connectionOk: boolean;
+  connectionError: string;
+}
+
+export interface ReportWeek {
+  id: string;
+  start: string;
+  end: string;
+}
+
+export interface ReportRecord {
+  week: string;
+  orderId: string;
+  entryId: string;
+  comanda: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  configs: OrderItemConfig[];
+  orderObservation?: string;
+  addedAt: number;
+  orderCreatedAt: number;
+  orderStatus: OrderStatus;
+  readyAt: number | null;
+  finishedAt: number | null;
+  status: 'VÁLIDO' | 'CANCELADO';
+  cancelledAt?: number;
+  cancellationReason?: string;
+}
+
+export interface WeeklyReport {
+  week: ReportWeek;
+  records: ReportRecord[];
 }
 
 declare global {
@@ -87,12 +129,16 @@ declare global {
       openPrintLog: () => Promise<void>;
       checkNetworkPrinter: (payload: { printerIp: string; printerPort: number }) => Promise<{ reachable: boolean }>;
       getNetworkConfig: () => Promise<NetworkConfig>;
-      saveNetworkConfig: (config: NetworkConfig) => Promise<NetworkConfig>;
-      diagnoseNetwork: () => Promise<NetworkDiagnostic>;
+      saveNetworkConfig: (config: NetworkConfig) => Promise<SaveNetworkConfigResult>;
+      checkNetworkLink: () => Promise<NetworkDiagnostics>;
       ordersList: () => Promise<Order[]>;
       ordersSave: (order: Order) => Promise<Order>;
       ordersImport: (orders: Order[]) => Promise<Order[]>;
       ordersStatus: (payload: { id: string; changes: Partial<Order> }) => Promise<{ ok: boolean }>;
+      reportsWeeks: () => Promise<ReportWeek[]>;
+      reportsWeek: (week: string) => Promise<WeeklyReport>;
+      reportsCancel: (payload: { orderId: string; entryId: string; reason: string }) => Promise<WeeklyReport>;
+      reportsOpenFolder: () => Promise<void>;
       getAppVersion: () => Promise<string>;
     };
   }

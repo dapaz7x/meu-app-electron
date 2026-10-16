@@ -1,5 +1,8 @@
 
 import { Order, PrinterConfig } from '../types';
+import { groupConfigs, hasDetails } from './orderSelection';
+
+const htmlText = (value: string) => value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
 
 class PrinterService {
   /**
@@ -23,7 +26,7 @@ class PrinterService {
         <center>
           <div style="background: white; color: black; border: 4px solid black; padding: 3px; margin-bottom: 5px;">
             <div style="font-size: 16pt; font-weight: 900; line-height: 1;">COMANDA</div>
-            <div style="font-size: 40pt; font-weight: 900; line-height: 1;">${order.comanda}</div>
+            <div style="font-size: 40pt; font-weight: 900; line-height: 1;">${htmlText(order.comanda)}</div>
             ${isMerge ? '<h2 style="font-size: 10pt; margin: 3px 0 0; border-top: 2px solid black;">NOVO PEDIDO</h2>' : ''}
           </div>
           <p style="margin: 8px 0 12px; font-size: 15pt; font-weight: 900;">${formattedDateTime}</p>
@@ -34,32 +37,32 @@ class PrinterService {
         ${order.entries.map(entry => `
           <div style="margin-bottom: 6px; border: ${entry.quantity > 1 ? '3px solid black' : 'none'}; padding: ${entry.quantity > 1 ? '5px' : '0'};">
             <div style="display: flex; justify-content: space-between; align-items: center;">
-              <h2 style="font-size: 22pt; margin: 0; text-transform: uppercase;">${entry.item.name}</h2>
+              <h2 style="font-size: 22pt; margin: 0; text-transform: uppercase;">${htmlText(entry.item.name)}</h2>
               <div style="font-size: 28pt; font-weight: 900; background: ${entry.quantity > 1 ? 'black' : 'transparent'}; color: ${entry.quantity > 1 ? 'white' : 'black'}; padding: 2px 10px;">${entry.quantity}x</div>
             </div>
 
-            ${entry.configs.map((cfg, idx) => `
+            ${groupConfigs(entry.configs).filter(group => hasDetails(group.config)).map(({ config: cfg, quantity }) => `
               <div style="margin-top: 10px; padding-left: 10px; border-top: 1px dotted #888;">
-                ${entry.quantity > 1 ? `<p style="font-size: 12pt; margin: 2px 0; font-weight: bold;">[ITEM ${idx + 1}]</p>` : ''}
+                ${entry.quantity > 1 ? `<p style="font-size: 12pt; margin: 2px 0; font-weight: bold;">PARA ${quantity} UNIDADE(S):</p>` : ''}
                 
                 ${cfg.flavor ? `
                   <div style="margin: 6px 0; padding: 5px; border: 2px solid black;">
-                    <p style="font-size: 18pt; margin: 0; font-weight: 900;">SABOR: ${cfg.flavor.toUpperCase()}</p>
+                    <p style="font-size: 18pt; margin: 0; font-weight: 900;">SABOR: ${htmlText(cfg.flavor.toUpperCase())}</p>
                   </div>
                 ` : ''}
 
-                ${cfg.cheese ? `<p style="font-size: 14pt; margin: 2px 0;">QUEIJO: <strong>${cfg.cheese.toUpperCase()}</strong></p>` : ''}
+                ${cfg.cheese ? `<p style="font-size: 14pt; margin: 2px 0;">QUEIJO: <strong>${htmlText(cfg.cheese.toUpperCase())}</strong></p>` : ''}
                 
                 ${cfg.selectedAddOns.length > 0 ? `
                   <p style="font-size: 16pt; margin: 10px 0 8px; font-weight: 900;"><strong>ADICIONAIS:</strong></p>
                   <div style="padding-left: 15px; font-size: 16pt; font-weight: 900; line-height: 1.65;">
-                    ${cfg.selectedAddOns.map(a => `• ${a.name.toUpperCase()}`).join('<br>')}
+                    ${cfg.selectedAddOns.map(a => `• ${htmlText(a.name.toUpperCase())}`).join('<br>')}
                   </div>
                 ` : ''}
                 
                 ${cfg.observation ? `
                   <div style="margin-top: 5px; padding: 3px; border: 1px solid black;">
-                    <p style="font-size: 14pt; margin: 0;"><strong>OBS:</strong> ${cfg.observation.toUpperCase()}</p>
+                    <p style="font-size: 14pt; margin: 0;"><strong>OBS:</strong> ${htmlText(cfg.observation.toUpperCase())}</p>
                   </div>
                 ` : ''}
               </div>
@@ -67,6 +70,7 @@ class PrinterService {
           </div>
           <hr style="border: 1px solid black; margin: 10px 0;">
         `).join('')}
+        ${order.observation ? `<div style="border: 3px solid black; padding: 6px; margin-top: 10px; white-space: pre-wrap; overflow-wrap: anywhere;"><strong>OBSERVAÇÃO DA COMANDA:</strong><br>${htmlText(order.observation.toUpperCase())}</div>` : ''}
         
         <div style="margin-top: 45px; min-height: 35mm;">
           <center>
@@ -152,9 +156,9 @@ class PrinterService {
       chunks.push('\n');
       bodyLines += 3;
 
-      entry.configs.forEach((cfg, index) => {
+      groupConfigs(entry.configs).filter(group => hasDetails(group.config)).forEach(({ config: cfg, quantity }) => {
         if (entry.quantity > 1) {
-          chunks.push(`[ITEM ${index + 1}]\n`);
+          chunks.push(`PARA ${quantity} UNIDADE(S):\n`);
           bodyLines += 1;
         }
         if (cfg.flavor) {
@@ -204,6 +208,13 @@ class PrinterService {
       chunks.push('\n', '------------------------------------------\n');
       bodyLines += 2;
     });
+
+    if (order.observation) {
+      chunks.push([ESC, 0x45, 0x01], [GS, 0x21, 0x01], 'OBSERVACAO DA COMANDA:\n',
+        `${order.observation.toUpperCase()}\n`, [GS, 0x21, 0x00], [ESC, 0x45, 0x00],
+        '------------------------------------------\n');
+      bodyLines += 3 + order.observation.split('\n').length;
+    }
 
     const minimumBodyLines = 12;
     const footerSpacing = Math.max(4, minimumBodyLines - bodyLines);

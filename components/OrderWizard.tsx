@@ -1,289 +1,231 @@
-
-import React, { useState, useEffect, useRef } from 'react';
-import { MenuItem, AddOn, OrderItemConfig } from '../types';
+import React, { useEffect, useRef, useState } from 'react';
+import { MenuItem, OrderDraftEntry, OrderItemConfig } from '../types';
 import { MENU_ITEMS, SALTY_ADDONS, SWEET_ADDONS, CHEESE_OPTIONS, PASTEL_FLAVORS } from '../constants';
+import { byName, changeFlavorCount, configDescription, copyConfig, DraftLine, emptyConfig, groupConfigs, MAX_QUANTITY, repeatConfig, resizeLine, searchText } from '../services/orderSelection';
 
 interface OrderWizardProps {
   comanda: string;
+  initialObservation?: string;
   onCancel: () => void;
-  onFinish: (item: MenuItem, quantity: number, configs: OrderItemConfig[]) => void;
+  onDraftChange: (dirty: boolean) => void;
+  onSavingChange: (saving: boolean) => void;
+  onFinish: (entries: OrderDraftEntry[], observation: string) => void | Promise<void>;
 }
 
-type WizardStep = 'SELECT_ITEM' | 'ADDONS' | 'FLAVOR' | 'OBS';
+function QuantityControl({ name, value, onChange, max = MAX_QUANTITY }: {
+  name: string; value: number; onChange: (value: number) => void; max?: number;
+}) {
+  return <div className="flex items-center justify-center gap-2">
+    <button type="button" aria-label={`Diminuir ${name}`} disabled={value === 0} onClick={() => onChange(value - 1)} className="w-11 h-11 rounded-xl bg-slate-100 text-2xl font-black disabled:opacity-30">−</button>
+    <input aria-label={`Quantidade de ${name}`} type="number" inputMode="numeric" min={0} max={max} value={value}
+      onFocus={event => event.target.select()} onChange={event => onChange(Number(event.target.value))}
+      className="w-14 h-11 rounded-xl border-2 border-slate-200 text-center text-2xl font-black text-[#b71c1c] focus:outline-none focus:border-[#E53935]" />
+    <button type="button" aria-label={`Aumentar ${name}`} disabled={value >= max} onClick={() => onChange(value + 1)} className="w-11 h-11 rounded-xl bg-[#E53935] text-white text-2xl font-black disabled:opacity-30">+</button>
+  </div>;
+}
 
-const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, onCancel, onFinish }) => {
-  const [step, setStep] = useState<WizardStep>('SELECT_ITEM');
-  const [selectedItem, setSelectedItem] = useState<MenuItem | null>(null);
-  const [quantity, setQuantity] = useState<number>(1);
-  const [currentUnitIndex, setCurrentUnitIndex] = useState<number>(0);
-  const [accumulatedConfigs, setAccumulatedConfigs] = useState<OrderItemConfig[]>([]);
-
-  const [selectedAddOns, setSelectedAddOns] = useState<AddOn[]>([]);
-  const [selectedCheese, setSelectedCheese] = useState<string>('Nenhum');
-  const [selectedFlavor, setSelectedFlavor] = useState<string>('');
-  const [observation, setObservation] = useState('');
-  
-  const scrollRef = useRef<HTMLDivElement>(null);
+function ProductDetails({ line, onChange, onClose }: { line: DraftLine; onChange: (line: DraftLine) => void; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const [unitIndex, setUnitIndex] = useState(0);
+  const isPastel = line.item.category === 'PASTEL';
+  const index = Math.min(unitIndex, line.quantity - 1);
+  const config = line.configs[line.individual ? index : 0] || emptyConfig();
+  const remaining = line.configs.filter(unit => !unit.flavor).length;
+  const addons = byName(line.item.category === 'TAPIOCA' || line.item.category === 'CREPIOCA' ? [...SALTY_ADDONS, ...SWEET_ADDONS] : SALTY_ADDONS);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  }, [step, currentUnitIndex]);
+    dialog.current?.showModal();
+    return () => dialog.current?.close();
+  }, []);
 
-  const isPastel = selectedItem?.category === 'PASTEL';
-  const isBurger = selectedItem?.category === 'BURGER';
+  function updateConfig(changes: Partial<OrderItemConfig>) {
+    const next = { ...config, ...changes, observation: '' };
+    onChange({ ...line, configs: line.individual ? line.configs.map((unit, current) => current === index ? copyConfig(next) : unit) : repeatConfig(next, line.quantity) });
+  }
 
-  const handleItemSelect = (item: MenuItem) => {
-    setSelectedItem(item);
-    setSelectedFlavor('');
-    setStep(item.category === 'PASTEL' ? 'FLAVOR' : 'ADDONS');
-  };
+  function changeMode(individual: boolean) {
+    if (individual === line.individual) return;
+    if (!individual && groupConfigs(line.configs).length > 1 && !window.confirm('Aplicar os adicionais da unidade selecionada a todas as unidades?')) return;
+    onChange({ ...line, individual, configs: individual ? line.configs : repeatConfig(config, line.quantity) });
+  }
 
-  const toggleAddOn = (addon: AddOn) => {
-    setSelectedAddOns(prev => 
-      prev.find(a => a.id === addon.id) 
-        ? prev.filter(a => a.id !== addon.id)
-        : [...prev, addon]
-    );
-  };
-
-  const handleNextUnit = () => {
-    const newConfig: OrderItemConfig = {
-      selectedAddOns,
-      cheese: selectedCheese !== 'Nenhum' ? selectedCheese : undefined,
-      flavor: isPastel ? selectedFlavor : undefined,
-      observation
-    };
-    
-    const newAccumulated = [...accumulatedConfigs, newConfig];
-    
-    if (currentUnitIndex + 1 < quantity) {
-      setAccumulatedConfigs(newAccumulated);
-      setCurrentUnitIndex(prev => prev + 1);
-      setSelectedAddOns([]);
-      setSelectedCheese('Nenhum');
-      setSelectedFlavor('');
-      setObservation('');
-      setStep(isPastel ? 'FLAVOR' : 'ADDONS');
-    } else if (selectedItem) {
-      onFinish(selectedItem, quantity, newAccumulated);
-    }
-  };
-
-  const currentAddonsList = selectedItem?.category === 'TAPIOCA' || selectedItem?.category === 'CREPIOCA' 
-    ? [...SALTY_ADDONS, ...SWEET_ADDONS] 
-    : SALTY_ADDONS;
-
-  const middleStepActive = step === 'ADDONS' || step === 'FLAVOR';
-
-  return (
-    <div className="h-full flex flex-col bg-white">
-      <div className="bg-white border-b-2 border-slate-100 flex items-stretch h-20 shadow-sm">
-        <button onClick={onCancel} className="bg-slate-900 text-white px-10 font-black uppercase flex items-center gap-3">
-            <i className="fa-solid fa-chevron-left"></i> CANCELAR
-        </button>
-        <div className="flex-1 flex items-center px-12 gap-10">
-            <div className={`flex items-center gap-3 font-black text-xl transition-all ${step === 'SELECT_ITEM' ? 'text-[#E53935]' : 'text-slate-200'}`}>
-                <span className={`w-10 h-10 rounded-full border-4 flex items-center justify-center text-base ${step === 'SELECT_ITEM' ? 'border-[#E53935]' : 'border-slate-100'}`}>1</span>
-                ITEM
-            </div>
-            <i className="fa-solid fa-chevron-right text-slate-100"></i>
-            <div className={`flex items-center gap-3 font-black text-xl transition-all ${middleStepActive ? 'text-[#E53935]' : 'text-slate-200'}`}>
-                <span className={`w-10 h-10 rounded-full border-4 flex items-center justify-center text-base ${middleStepActive ? 'border-[#E53935]' : 'border-slate-100'}`}>2</span>
-                {isPastel ? 'SABOR' : 'EXTRAS'}
-            </div>
-            <i className="fa-solid fa-chevron-right text-slate-100"></i>
-            <div className={`flex items-center gap-3 font-black text-xl transition-all ${step === 'OBS' ? 'text-[#E53935]' : 'text-slate-200'}`}>
-                <span className={`w-10 h-10 rounded-full border-4 flex items-center justify-center text-base ${step === 'OBS' ? 'border-[#E53935]' : 'border-slate-100'}`}>3</span>
-                NOTAS
-            </div>
-        </div>
-        {quantity > 1 && step !== 'SELECT_ITEM' && (
-          <div className="px-10 bg-[#C5A021] text-white flex items-center font-black uppercase text-xl border-l-4 border-white">
-             ITEM {currentUnitIndex + 1} de {quantity}
-          </div>
-        )}
+  return <dialog ref={dialog} aria-labelledby="details-title" onCancel={event => { event.preventDefault(); onClose(); }}
+    onKeyDown={event => { if (event.key === 'Escape') event.stopPropagation(); }}
+    className="rounded-3xl p-0 w-[min(900px,95vw)] max-h-[90vh] shadow-2xl backdrop:bg-slate-950/70">
+    <div className="flex flex-col max-h-[90vh]">
+      <div className="p-5 border-b-2 border-slate-100 flex justify-between items-center gap-3">
+        <div><h2 id="details-title" className="text-2xl font-black text-slate-900">{line.quantity}× {line.item.name}</h2>
+          <p className="text-slate-500 font-bold">{isPastel ? 'Distribua a quantidade entre os sabores.' : 'Adicionais opcionais, aplicados de uma vez.'}</p></div>
+        <button autoFocus onClick={onClose} aria-label="Fechar detalhes" className="w-12 h-12 rounded-xl bg-slate-100 text-2xl font-black">×</button>
       </div>
-
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-8 scroll-smooth">
-        {step === 'SELECT_ITEM' && (
-          <div className="max-w-7xl mx-auto flex flex-col">
-            <div className="mb-10 flex items-center justify-between bg-slate-50 p-6 rounded-2xl border-2 border-slate-100">
-               <span className="text-2xl font-black uppercase text-slate-700">Quantidade:</span>
-               <div className="flex items-center gap-4">
-                  <button onClick={() => setQuantity(prev => Math.max(1, prev - 1))} className="w-16 h-16 bg-white border-4 border-slate-200 rounded-xl text-3xl font-black text-slate-600 active:scale-90 transition">-</button>
-                  <span className="text-5xl font-black text-[#E53935] w-20 text-center">{quantity}</span>
-                  <button onClick={() => setQuantity(prev => Math.min(10, prev + 1))} className="w-16 h-16 bg-white border-4 border-slate-200 rounded-xl text-3xl font-black text-slate-600 active:scale-90 transition">+</button>
-               </div>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-              {MENU_ITEMS.map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => handleItemSelect(item)}
-                  className="group bg-white rounded-2xl shadow-sm hover:shadow-xl p-6 flex flex-col items-center text-center border-4 border-slate-50 hover:border-[#E53935] active:scale-95 transition-all"
-                >
-                  <div className="w-24 h-24 rounded-full bg-slate-50 flex items-center justify-center text-slate-300 group-hover:bg-red-50 group-hover:text-[#E53935] transition-all mb-6">
-                     <i className={`${item.icon} text-5xl`}></i>
-                  </div>
-                  <span className="text-xl font-black uppercase text-slate-800 tracking-tight leading-tight">{item.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {step === 'FLAVOR' && (
-          <div className="max-w-5xl mx-auto">
-            <h2 className="text-4xl font-black mb-4 uppercase text-slate-900 flex items-center gap-4">
-              <div className="w-12 h-12 bg-[#C5A021] rounded-full flex items-center justify-center text-white">
-                <i className="fa-solid fa-utensils text-xl"></i>
-              </div>
-              Escolha o sabor {quantity > 1 ? `(Unidade ${currentUnitIndex + 1})` : ''}
-            </h2>
-            <p className="text-lg font-bold text-slate-400 mb-10 uppercase">Pastel Frito</p>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-              {PASTEL_FLAVORS.map(flavor => (
-                <button
-                  key={flavor}
-                  onClick={() => setSelectedFlavor(flavor)}
-                  className={`min-h-32 p-8 rounded-3xl border-4 text-2xl font-black uppercase transition-all text-center ${selectedFlavor === flavor ? 'border-[#C5A021] bg-[#C5A021] text-white shadow-xl scale-[1.02]' : 'border-slate-100 bg-white text-slate-700 shadow-sm hover:border-[#C5A021]'}`}
-                >
-                  {flavor}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {step === 'ADDONS' && (
-          <div className="max-w-6xl mx-auto">
-            <h2 className="text-4xl font-black mb-10 uppercase text-slate-900 flex items-center gap-4">
-                <div className="w-12 h-12 bg-[#C5A021] rounded-full flex items-center justify-center text-white">
-                    <i className="fa-solid fa-plus text-xl"></i>
-                </div> 
-                Adicionais {quantity > 1 ? `(Unidade ${currentUnitIndex + 1})` : ''}
-            </h2>
-            
-            {isBurger && (
-              <div className="mb-12 bg-slate-50 p-8 rounded-3xl border-2 border-slate-100 shadow-inner">
-                <p className="text-2xl font-black mb-6 uppercase text-slate-800">Escolha o Queijo:</p>
-                <div className="flex gap-4">
-                  {CHEESE_OPTIONS.map(c => (
-                    <button
-                      key={c}
-                      onClick={() => setSelectedCheese(c)}
-                      className={`flex-1 py-6 rounded-2xl text-2xl font-black transition-all border-4 ${selectedCheese === c ? 'bg-[#E53935] border-[#E53935] text-white shadow-xl scale-105' : 'bg-white border-slate-100 text-slate-400'}`}
-                    >
-                      {c}
-                    </button>
-                  ))}
+      <div className="p-5 overflow-y-auto custom-scrollbar">
+        {isPastel ? <>
+          <p role="status" className={`font-black mb-4 ${remaining ? 'text-[#b71c1c]' : 'text-green-700'}`}>
+            {remaining ? `Falta escolher ${remaining} ${remaining === 1 ? 'sabor' : 'sabores'}.` : `${line.quantity} pastéis com sabor escolhido.`}
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {[...PASTEL_FLAVORS].sort((a, b) => a.localeCompare(b, 'pt-BR')).map(flavor => {
+              const count = line.configs.filter(unit => unit.flavor === flavor).length;
+              return <div key={flavor} className={`p-4 rounded-2xl border-2 ${count ? 'bg-amber-50 border-[#C5A021]' : 'border-slate-100'}`}>
+                <div className="flex items-center justify-between gap-2 mb-3"><span className="font-black">{flavor}</span>
+                  <button aria-label={`Todos de ${flavor}`} onClick={() => onChange({ ...line, configs: repeatConfig({ ...emptyConfig(), flavor }, line.quantity) })}
+                    className="px-3 py-2 rounded-lg bg-slate-100 text-xs font-black">Todos</button></div>
+                <div className="flex items-center justify-center gap-4">
+                  <button aria-label={`Diminuir sabor ${flavor}`} disabled={!count} onClick={() => onChange(changeFlavorCount(line, flavor, -1))} className="w-11 h-11 bg-white border-2 border-slate-200 rounded-xl text-2xl font-black disabled:opacity-30">−</button>
+                  <span aria-label={`Quantidade do sabor ${flavor}`} className="w-10 text-center text-2xl font-black">{count}</span>
+                  <button aria-label={`Aumentar sabor ${flavor}`} disabled={!remaining} onClick={() => onChange(changeFlavorCount(line, flavor, 1))} className="w-11 h-11 bg-[#E53935] text-white rounded-xl text-2xl font-black disabled:opacity-30">+</button>
                 </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {currentAddonsList.map(addon => {
-                const isSelected = selectedAddOns.find(a => a.id === addon.id);
-                return (
-                  <button
-                    key={addon.id}
-                    onClick={() => toggleAddOn(addon)}
-                    className={`p-8 rounded-2xl border-4 text-xl font-black uppercase transition-all text-center flex items-center justify-center ${isSelected ? 'border-[#C5A021] bg-[#C5A021] text-white shadow-lg' : 'border-slate-50 bg-white text-slate-700 shadow-sm'}`}
-                  >
-                    {addon.name}
-                  </button>
-                );
-              })}
-            </div>
+              </div>;
+            })}
           </div>
-        )}
-
-        {step === 'OBS' && (
-          <div className="max-w-4xl mx-auto flex flex-col h-full">
-            <h2 className="text-4xl font-black mb-4 uppercase text-slate-900">
-               Observações {quantity > 1 ? `(Unidade ${currentUnitIndex + 1})` : ''}
-            </h2>
-            {isPastel && selectedFlavor && (
-              <div className="mb-4 bg-amber-50 border-2 border-amber-200 rounded-2xl px-6 py-4 text-xl font-black uppercase text-amber-900">
-                Sabor: {selectedFlavor}
-              </div>
-            )}
-            <textarea
-              value={observation}
-              onChange={(e) => setObservation(e.target.value)}
-              placeholder="Ex: Sem cebola, bem passado..."
-              className="w-full h-48 min-h-48 max-h-48 resize-none p-6 text-3xl border-4 border-slate-50 rounded-3xl focus:outline-none focus:border-[#E53935] shadow-inner bg-slate-50 uppercase font-bold"
-            />
-            
-            <div className="mt-4 flex flex-wrap gap-3">
-                {['PRA VIAGEM', 'SEM CEBOLA', 'BEM PASSADO', 'SEM TOMATE', 'POUCO SAL'].map(s => (
-                    <button 
-                        key={s} 
-                        onClick={() => setObservation(prev => prev ? `${prev}, ${s}` : s)}
-                        className="bg-slate-100 px-6 py-3 rounded-full font-black text-base text-slate-600 hover:bg-[#C5A021] hover:text-white transition-all uppercase"
-                    >
-                        + {s}
-                    </button>
-                ))}
+        </> : <>
+          {line.quantity > 1 && <div className="mb-5">
+            <div className="flex gap-2">
+              <button aria-pressed={!line.individual} onClick={() => changeMode(false)} className={`flex-1 p-3 rounded-xl font-black ${!line.individual ? 'bg-[#C5A021] text-white' : 'bg-slate-100'}`}>Todos iguais</button>
+              <button aria-pressed={line.individual} onClick={() => changeMode(true)} className={`flex-1 p-3 rounded-xl font-black ${line.individual ? 'bg-[#C5A021] text-white' : 'bg-slate-100'}`}>Adicionais diferentes</button>
             </div>
-          </div>
-        )}
+            <p className="text-sm text-slate-500 mt-2">{line.individual ? 'Escolha a unidade que precisa de adicionais diferentes.' : `O que escolher vale para as ${line.quantity} unidades.`}</p>
+          </div>}
+          {line.individual && <div role="tablist" aria-label="Unidades do produto" className="flex gap-2 overflow-x-auto pb-3 mb-3">
+            {line.configs.map((_, current) => <button key={current} role="tab" aria-selected={current === index} onClick={() => setUnitIndex(current)}
+              className={`px-4 py-3 rounded-xl whitespace-nowrap font-black ${current === index ? 'bg-[#E53935] text-white' : 'bg-slate-100'}`}>Unidade {current + 1}</button>)}
+          </div>}
+          {line.item.category === 'BURGER' && <div className="mb-5">
+            <h3 className="font-black uppercase mb-3">Queijo</h3>
+            <div className="flex gap-3">{CHEESE_OPTIONS.map(cheese => <button key={cheese} aria-pressed={(config.cheese || 'Nenhum') === cheese}
+              onClick={() => updateConfig({ cheese: cheese === 'Nenhum' ? undefined : cheese })}
+              className={`flex-1 p-3 rounded-xl border-2 font-black ${(config.cheese || 'Nenhum') === cheese ? 'bg-[#E53935] text-white border-[#E53935]' : 'border-slate-200'}`}>{cheese}</button>)}</div>
+          </div>}
+          <h3 className="font-black uppercase mb-3">Adicionais</h3>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3" aria-label="Lista de adicionais">{addons.map(addon => {
+            const selected = config.selectedAddOns.some(value => value.id === addon.id);
+            return <button key={addon.id} aria-pressed={selected} onClick={() => updateConfig({ selectedAddOns: selected ? config.selectedAddOns.filter(value => value.id !== addon.id) : [...config.selectedAddOns, addon] })}
+              className={`p-4 rounded-xl border-2 font-bold ${selected ? 'bg-[#C5A021] text-white border-[#C5A021]' : 'border-slate-100'}`}>{addon.name}</button>;
+          })}</div>
+        </>}
       </div>
-
-      <div className="bg-white p-8 border-t-4 border-slate-50 flex gap-6 shadow-2xl">
-        <div className="flex-1 flex items-center">
-            {selectedItem && (
-                <div className="flex items-center gap-6 border-l-8 border-[#E53935] pl-6">
-                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center text-[#E53935]">
-                        <i className={`${selectedItem.icon} text-2xl`}></i>
-                    </div>
-                    <div>
-                        <p className="text-xs font-black text-slate-300 uppercase">Seleção atual:</p>
-                        <p className="text-3xl font-black uppercase text-slate-800 tracking-tight">
-                           {quantity}x {selectedItem.name}
-                        </p>
-                    </div>
-                </div>
-            )}
-        </div>
-
-        {step === 'FLAVOR' && (
-          <button 
-            onClick={() => setStep('OBS')}
-            disabled={!selectedFlavor}
-            className="bg-[#E53935] disabled:bg-slate-200 disabled:text-slate-400 text-white px-20 py-6 rounded-2xl text-2xl font-black uppercase shadow-xl active:scale-95 transition-all flex items-center gap-4"
-          >
-            PRÓXIMO <i className="fa-solid fa-arrow-right"></i>
-          </button>
-        )}
-
-        {step === 'ADDONS' && (
-          <button 
-            onClick={() => setStep('OBS')}
-            className="bg-[#E53935] text-white px-20 py-6 rounded-2xl text-2xl font-black uppercase shadow-xl hover:bg-red-700 active:scale-95 transition-all flex items-center gap-4"
-          >
-            PRÓXIMO <i className="fa-solid fa-arrow-right"></i>
-          </button>
-        )}
-
-        {step === 'OBS' && (
-          <button 
-            onClick={handleNextUnit}
-            className={`px-24 py-6 rounded-2xl text-3xl font-black uppercase shadow-xl active:scale-95 transition-all flex items-center gap-4 ${currentUnitIndex + 1 < quantity ? 'bg-[#E53935] text-white hover:bg-red-700' : 'bg-[#C5A021] text-white hover:bg-[#a6861a]'}`}
-          >
-            {currentUnitIndex + 1 < quantity ? (
-                <>PROX. UNIDADE <i className="fa-solid fa-arrow-right"></i></>
-            ) : (
-                <>CONFIRMAR TUDO <i className="fa-solid fa-check-double"></i></>
-            )}
-          </button>
-        )}
-      </div>
+      <div className="p-4 border-t-2 border-slate-100 flex justify-end"><button onClick={onClose} className="bg-[#C5A021] text-white rounded-xl px-8 py-4 font-black">Concluir detalhes</button></div>
     </div>
-  );
+  </dialog>;
+}
+
+const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, initialObservation = '', onCancel, onFinish, onDraftChange, onSavingChange }) => {
+  const [lines, setLines] = useState<Record<string, DraftLine>>({});
+  const [observation, setObservation] = useState(initialObservation);
+  const [search, setSearch] = useState('');
+  const [selectedOnly, setSelectedOnly] = useState(false);
+  const [detailsId, setDetailsId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const submitting = useRef(false);
+  const selected = byName(Object.values(lines).filter(line => line.quantity > 0).map(line => ({ ...line, name: line.item.name })));
+  const total = selected.reduce((sum, line) => sum + line.quantity, 0);
+  const dirty = total > 0 || observation !== initialObservation;
+  const items = byName(MENU_ITEMS).filter(item => (!selectedOnly || lines[item.id]?.quantity > 0)
+    && searchText(item.name).includes(searchText(search.trim())));
+
+  useEffect(() => { onDraftChange(dirty); }, [dirty, onDraftChange]);
+  useEffect(() => () => { onDraftChange(false); onSavingChange(false); }, [onDraftChange, onSavingChange]);
+
+  function lineFor(item: MenuItem): DraftLine {
+    return lines[item.id] || { item, quantity: 0, configs: [], individual: false };
+  }
+  function updateLine(line: DraftLine) {
+    setLines(current => ({ ...current, [line.item.id]: line }));
+    setError('');
+  }
+  function openDetails(item: MenuItem) {
+    if (!lines[item.id]?.quantity) updateLine(resizeLine(lineFor(item), 1));
+    setDetailsId(item.id);
+  }
+
+  async function finish() {
+    if (!total || submitting.current) return;
+    const missing = selected.find(line => line.item.category === 'PASTEL' && line.configs.some(config => !config.flavor));
+    if (missing) {
+      setDetailsId(missing.item.id);
+      setError('Escolha os sabores dos pastéis antes de enviar.');
+      return;
+    }
+    submitting.current = true;
+    setSaving(true);
+    onSavingChange(true);
+    setError('');
+    try {
+      await onFinish(selected.map(({ item, quantity, configs }) => ({ item, quantity, configs: configs.map(copyConfig) })), observation.trim());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Não foi possível enviar. Seus itens continuam aqui.');
+    } finally {
+      submitting.current = false;
+      setSaving(false);
+      onSavingChange(false);
+    }
+  }
+
+  return <div className="h-full flex flex-col bg-slate-50">
+    <div className="flex flex-wrap items-center justify-between gap-3 bg-white border-b-2 border-slate-100 p-4">
+      <button disabled={saving} onClick={onCancel} className="px-5 py-3 bg-slate-900 text-white rounded-xl font-black disabled:opacity-40">Voltar ao painel</button>
+      <p className="font-black text-slate-600">Comanda {comanda} • Selecione os produtos e envie juntos</p>
+    </div>
+    <fieldset disabled={saving} className="flex-1 min-h-0 min-w-0 overflow-y-auto lg:overflow-hidden flex flex-col lg:flex-row">
+      <div className="flex-1 min-w-0 lg:overflow-y-auto p-4 custom-scrollbar">
+        <div className="flex gap-3 mb-4 items-center sticky top-0 bg-slate-50 py-2 z-10">
+          <div className="relative flex-1"><input aria-label="Buscar produto" value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar produto…"
+            className="w-full p-3 pr-12 rounded-xl border-2 border-slate-200 focus:outline-none focus:border-[#E53935]" />
+            {search && <button aria-label="Limpar busca" onClick={() => setSearch('')} className="absolute right-1 top-1 w-10 h-10 font-black text-xl">×</button>}
+          </div>
+          <button aria-pressed={selectedOnly} onClick={() => setSelectedOnly(value => !value)} className={`px-4 py-3 rounded-xl font-black text-sm border-2 ${selectedOnly ? 'bg-amber-50 border-[#C5A021]' : 'bg-white border-slate-200'}`}>Selecionados ({selected.length})</button>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3">
+          {items.map(item => {
+            const line = lineFor(item);
+            const missingFlavor = item.category === 'PASTEL' && line.configs.some(config => !config.flavor);
+            const details = groupConfigs(line.configs).map(group => {
+              const description = configDescription(group.config);
+              return description && `${group.quantity}× ${description}`;
+            }).filter(Boolean).join('; ');
+            return <article key={item.id} aria-label={item.name} className={`bg-white rounded-2xl border-2 p-3 flex flex-col shadow-sm ${line.quantity ? 'border-[#C5A021] bg-amber-50' : 'border-slate-200'}`}>
+              <button aria-label={`Adicionar ${item.name}`} onClick={() => updateLine(resizeLine(line, line.quantity + 1))} className="flex flex-col items-center justify-center gap-2 flex-1 min-h-24 mb-3">
+                <i aria-hidden="true" className={`${item.icon} text-2xl text-[#E53935]`}></i><span data-product-name className="font-black text-center text-slate-800 leading-tight">{item.name}</span>
+              </button>
+              <QuantityControl name={item.name} value={line.quantity} onChange={value => updateLine(resizeLine(line, value))} />
+              <button aria-label={`${item.category === 'PASTEL' ? 'Sabores' : 'Adicionais'} de ${item.name}`} onClick={() => openDetails(item)}
+                className={`mt-3 p-2 rounded-lg font-bold text-sm ${missingFlavor ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-700'}`}>
+                {item.category === 'PASTEL' ? missingFlavor ? 'Escolher sabores' : 'Sabores' : item.category === 'BURGER' ? 'Adicionais / queijo' : 'Adicionais'}
+              </button>
+              {details && <p className="mt-2 text-xs text-slate-600 break-words">{details}</p>}
+            </article>;
+          })}
+        </div>
+        {!items.length && <p className="p-6 text-center text-slate-500 font-bold">Nenhum produto encontrado.</p>}
+      </div>
+      <aside aria-label="Resumo da comanda" className="lg:w-80 xl:w-96 shrink-0 bg-white border-t-2 lg:border-t-0 lg:border-l-2 border-slate-200 p-4 flex flex-col gap-3 lg:overflow-y-auto custom-scrollbar">
+        <div><h2 className="font-black text-xl">Resumo • Comanda {comanda}</h2><p aria-live="polite" className="text-slate-500">{total} {total === 1 ? 'unidade selecionada' : 'unidades selecionadas'}</p></div>
+        <div className="space-y-3 lg:flex-1 lg:min-h-0 lg:overflow-y-auto custom-scrollbar">
+          {!selected.length && <p className="text-slate-400 py-3">Use + abaixo do produto ou toque no nome para adicionar.</p>}
+          {selected.map(line => <div key={line.item.id} className="flex items-start gap-2 border-b border-slate-100 pb-3">
+            <button onClick={() => openDetails(line.item)} className="flex-1 text-left"><span className="font-black">{line.quantity}× {line.item.name}</span>
+              <span className="block text-xs text-slate-500 mt-1">{line.item.category === 'PASTEL' && line.configs.some(config => !config.flavor) ? 'Falta escolher sabores' : 'Toque para ajustar os detalhes'}</span></button>
+            <button aria-label={`Remover ${line.item.name}`} onClick={() => updateLine(resizeLine(line, 0))} className="w-10 h-10 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-700 text-2xl">×</button>
+          </div>)}
+        </div>
+        <div><label htmlFor="order-observation" className="block font-black mb-2">Observação da comanda</label>
+          <textarea id="order-observation" value={observation} maxLength={500} onChange={event => setObservation(event.target.value)} placeholder="Ex.: para viagem; 1 Kids sem cebola…"
+            className="w-full h-24 p-3 border-2 border-slate-200 rounded-xl resize-none focus:outline-none focus:border-[#E53935]" />
+          <p className="text-xs text-slate-500">Vale para toda a comanda e sai uma vez no cupom. Para exceções, indique o produto.</p>
+          <button onClick={() => setObservation(value => /para viagem/i.test(value) ? value : `${value.trim()}${value.trim() ? '; ' : ''}Para viagem`.slice(0, 500))}
+            className="mt-2 px-3 py-2 rounded-lg bg-amber-50 text-sm font-black text-slate-700">+ Para viagem</button>
+        </div>
+        <div className="mt-auto">
+          {error && <p role="alert" className="mb-3 font-bold text-red-700">{error}</p>}
+          <button disabled={saving || !total} onClick={finish} className="w-full py-5 px-3 rounded-2xl bg-[#C5A021] text-white font-black text-xl shadow-md disabled:opacity-40">
+            {saving ? 'Enviando…' : `Enviar ${total} ${total === 1 ? 'item' : 'itens'} para a chapa`}
+          </button>
+        </div>
+      </aside>
+    </fieldset>
+    {detailsId && lines[detailsId]?.quantity > 0 && <ProductDetails key={detailsId} line={lines[detailsId]} onChange={updateLine} onClose={() => setDetailsId(null)} />}
+  </div>;
 };
 
 export default OrderWizard;

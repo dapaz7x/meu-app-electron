@@ -1,6 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Order, OrderStatus, OrderEntry } from '../types';
+import { groupConfigs, hasDetails } from '../services/orderSelection';
 
 interface DashboardProps {
   orders: Order[];
@@ -52,6 +53,10 @@ const OrderCard: React.FC<{ order: Order; onClick: () => void }> = ({ order, onC
       </div>
 
       <div className="p-5 flex-1 space-y-4 overflow-y-auto custom-scrollbar">
+        {order.observation && <div className="p-3 rounded-xl bg-amber-50 border-2 border-[#C5A021] text-slate-900">
+          <p className="text-xs font-black uppercase mb-1">Observação da comanda</p>
+          <p className="font-bold whitespace-pre-wrap break-words">{order.observation}</p>
+        </div>}
         {order.entries.map((entry, eIdx) => (
           <div 
             key={entry.id} 
@@ -70,9 +75,10 @@ const OrderCard: React.FC<{ order: Order; onClick: () => void }> = ({ order, onC
             </div>
 
             <div className="space-y-3">
-              {entry.configs.map((cfg, cIdx) => (
+              {groupConfigs(entry.configs).filter(group => hasDetails(group.config)).map(({ config: cfg, quantity }, cIdx) => (
                 <div key={cIdx} className={`p-3 rounded-xl border ${entry.quantity > 1 ? 'bg-black/10 border-white/20' : 'bg-white border-slate-200'}`}>
-                  {entry.quantity > 1 && <span className="text-[10px] font-black uppercase opacity-60 block mb-1">Item #{cIdx + 1}:</span>}
+                  {entry.quantity > 1 && <span className="text-xs font-black uppercase opacity-80 block mb-1">{quantity} {quantity === 1 ? 'unidade' : 'unidades'}:</span>}
+                  {cfg.flavor && <p className="font-black mb-2">Sabor: {cfg.flavor}</p>}
                   
                   {cfg.cheese && (
                     <div className="flex items-center gap-2 mb-1">

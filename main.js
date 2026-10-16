@@ -7,6 +7,7 @@ const net = require("net");
 const http = require("http");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
+const { createReportStore } = require("./reports.cjs");
 const execFileAsync = promisify(execFile);
 const ORDER_SERVER_PORT = 37842;
 const UPDATE_INTERVAL_MS = 10 * 60 * 1000;
@@ -17,6 +18,22 @@ let orderServerPort = null;
 let orderServerLastError = "";
 let lastClientSeenAt = null;
 let lastClientIp = "";
+let reportStore;
+
+function reportsDirectory() {
+  return path.join(app.getPath("userData"), "relatorios");
+}
+
+function getReportStore() {
+  if (!reportStore) reportStore = createReportStore(reportsDirectory());
+  return reportStore;
+}
+
+function updatedReportStore() {
+  const store = getReportStore();
+  store.sync(readOrdersFile());
+  return store;
+}
 
 function printLogPath() {
   return path.join(app.getPath("userData"), "impressao.log");
@@ -75,6 +92,13 @@ function readOrdersFile() {
 
 function writeOrdersFile(orders) {
   fs.writeFileSync(ordersPath(), JSON.stringify(orders, null, 2), "utf8");
+  try {
+    getReportStore().sync(orders);
+  } catch (error) {
+    // The existing order/printing flow must not depend on report availability.
+    // Opening reports retries reconciliation from pedidos.json and shows any error.
+    console.error("Não foi possível atualizar os relatórios:", error);
+  }
 }
 
 function readNetworkConfig() {
@@ -141,6 +165,16 @@ async function handleOrderRequest(request, response) {
     const url = new URL(request.url, "http://localhost");
     if (request.method === "GET" && url.pathname === "/health") {
       return jsonResponse(response, 200, { ok: true, app: "gestor-chapa", version: app.getVersion() });
+    }
+    if (request.method === "GET" && url.pathname === "/reports/weeks") {
+      return jsonResponse(response, 200, updatedReportStore().listWeeks());
+    }
+    if (request.method === "GET" && url.pathname === "/reports/week") {
+      return jsonResponse(response, 200, updatedReportStore().readWeek(url.searchParams.get("week") || ""));
+    }
+    if (request.method === "POST" && url.pathname === "/reports/cancel") {
+      const payload = await readJsonBody(request);
+      return jsonResponse(response, 200, updatedReportStore().cancel(payload));
     }
     if (request.method === "GET" && url.pathname === "/orders") {
       return jsonResponse(response, 200, readOrdersFile());
@@ -495,6 +529,20 @@ ipcMain.handle("check-network-link", async () => {
 
 ipcMain.handle("orders-list", () => ordersOperation(readOrdersFile, "/orders"));
 
+ipcMain.handle("reports-weeks", () => ordersOperation(() => updatedReportStore().listWeeks(), "/reports/weeks"));
+ipcMain.handle("reports-week", (_event, week) => ordersOperation(
+  () => updatedReportStore().readWeek(week), `/reports/week?week=${encodeURIComponent(week)}`
+));
+ipcMain.handle("reports-cancel", (_event, payload) => ordersOperation(
+  () => updatedReportStore().cancel(payload), "/reports/cancel", { method: "POST", body: JSON.stringify(payload) }
+));
+ipcMain.handle("reports-open-folder", async () => {
+  if (readNetworkConfig().mode === "client") throw new Error("Os arquivos TXT ficam na pasta de relatórios do PC principal.");
+  updatedReportStore();
+  const error = await shell.openPath(reportsDirectory());
+  if (error) throw new Error(error);
+});
+
 ipcMain.handle("orders-save", (_event, order) => ordersOperation(() => {
   const orders = readOrdersFile().filter(item => item.id !== order.id);
   writeOrdersFile([...orders, order]);
@@ -671,6 +719,11 @@ autoUpdater.on("download-progress", progress => {
 });
 
 app.whenReady().then(() => {
+  try {
+    updatedReportStore();
+  } catch (error) {
+    console.error("Não foi possível preparar os relatórios:", error);
+  }
   createWindow();
   ensureOrderServer().catch(error => {
     dialog.showErrorBox("Rede do Gestor de Chapa", `Não foi possível iniciar o compartilhamento: ${error.message}`);

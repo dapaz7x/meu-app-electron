@@ -1,7 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Order, OrderStatus, View, MenuItem, AddOn, PrinterConfig, OrderItemConfig, OrderEntry } from './types';
-import { MENU_ITEMS, SALTY_ADDONS, SWEET_ADDONS, CHEESE_OPTIONS } from './constants';
+import { Order, OrderStatus, View, PrinterConfig, OrderDraftEntry, OrderEntry } from './types';
 import Dashboard from './components/Dashboard';
 import OrderWizard from './components/OrderWizard';
 import Reports from './components/Reports';
@@ -16,6 +15,7 @@ const App: React.FC = () => {
   });
   const [activeComanda, setActiveComanda] = useState<string | null>(null);
   const [isComandaInvalid, setIsComandaInvalid] = useState(false);
+  const [draftObservation, setDraftObservation] = useState('');
   const [printerConfig, setPrinterConfig] = useState<PrinterConfig>(() => {
     const saved = localStorage.getItem('araujo_printer');
     const parsed = saved ? JSON.parse(saved) : {};
@@ -29,6 +29,17 @@ const App: React.FC = () => {
   });
 
   const barcodeInputRef = useRef<HTMLInputElement>(null);
+  const draftDirty = useRef(false);
+  const draftSaving = useRef(false);
+  const onDraftChange = useCallback((dirty: boolean) => { draftDirty.current = dirty; }, []);
+  const onSavingChange = useCallback((saving: boolean) => { draftSaving.current = saving; }, []);
+  const navigate = useCallback((next: View) => {
+    if (draftSaving.current) return;
+    if (view === 'WIZARD' && draftDirty.current && !window.confirm('Sair sem enviar os itens desta comanda?')) return;
+    setView(next);
+    setActiveComanda(null);
+    setIsComandaInvalid(false);
+  }, [view]);
 
   useEffect(() => {
     localStorage.setItem('araujo_orders', JSON.stringify(orders));
@@ -78,22 +89,21 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
       if (e.key === 'F1') {
         e.preventDefault();
-        setView('REPORTS');
+        navigate('REPORTS');
       } else if (e.ctrlKey && e.shiftKey && e.key === 'F12') {
         e.preventDefault();
-        setView('SETTINGS');
+        navigate('SETTINGS');
       } else if (e.key === 'Escape') {
-        setView('DASHBOARD');
-        setActiveComanda(null);
-        setIsComandaInvalid(false);
+        navigate('DASHBOARD');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -124,18 +134,16 @@ const App: React.FC = () => {
   const handleBarcodeSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (activeComanda && !isComandaInvalid) {
+      setDraftObservation(orders.find(order => order.comanda === activeComanda && order.status !== OrderStatus.FINISHED)?.observation || '');
       setView('WIZARD');
     }
   };
 
-  const createOrder = async (item: MenuItem, quantity: number, configs: OrderItemConfig[]) => {
-    const newEntry: OrderEntry = {
-      id: Math.random().toString(36).substr(2, 9),
-      item,
-      quantity,
-      configs,
-      addedAt: Date.now()
-    };
+  const createOrder = async (entries: OrderDraftEntry[], observation: string) => {
+    const addedAt = Date.now();
+    const newEntries: OrderEntry[] = entries.map(entry => ({
+      ...entry, id: crypto.randomUUID(), addedAt, orderObservation: observation
+    }));
 
     let sourceOrders = orders;
     try {
@@ -148,34 +156,31 @@ const App: React.FC = () => {
     const existingOrder = sourceOrders.find(o => o.comanda === activeComanda && o.status !== OrderStatus.FINISHED);
     const orderToSave: Order = existingOrder ? {
       ...existingOrder,
-      entries: [...existingOrder.entries, newEntry],
+      entries: [...existingOrder.entries, ...newEntries],
+      observation,
       status: OrderStatus.PREPARING,
       finalizingAt: undefined,
       finishedAt: undefined
     } : {
       id: Math.random().toString(36).substr(2, 9),
       comanda: activeComanda || '000',
-      entries: [newEntry],
+      entries: newEntries,
+      observation,
       status: OrderStatus.PREPARING,
       createdAt: Date.now()
     };
 
-    setOrders([...sourceOrders.filter(order => order.id !== orderToSave.id), orderToSave]);
     try {
       await window.electronAPI?.ordersSave(orderToSave);
-
-      // O painel mantém o histórico completo da comanda, mas a impressão contém
-      // somente o item registrado nesta operação para evitar duplicidade na produção.
-      const orderToPrint: Order = {
-        ...orderToSave,
-        entries: [newEntry]
-      };
-      PrinterService.printOrder(orderToPrint, printerConfig, Boolean(existingOrder));
     } catch (error) {
-      alert(error instanceof Error
-        ? `O pedido apareceu nesta tela, mas não foi sincronizado: ${error.message}`
-        : 'O pedido apareceu nesta tela, mas não foi sincronizado.');
+      throw new Error(error instanceof Error
+        ? `Não foi possível salvar: ${error.message}. Seus itens continuam aqui.`
+        : 'Não foi possível salvar. Seus itens continuam aqui.');
     }
+
+    setOrders([...sourceOrders.filter(order => order.id !== orderToSave.id), orderToSave]);
+    // Um cupom por lançamento, contendo somente os produtos novos.
+    PrinterService.printOrder({ ...orderToSave, entries: newEntries }, printerConfig, Boolean(existingOrder));
 
     setView('DASHBOARD');
     setActiveComanda(null);
@@ -239,10 +244,10 @@ const App: React.FC = () => {
         )}
 
         <div className="flex gap-3">
-          <button onClick={() => setView('DASHBOARD')} className={`px-8 py-3 rounded-xl font-black uppercase transition-all shadow-sm border-b-4 ${view === 'DASHBOARD' ? 'bg-[#C5A021] text-white border-[#9e801a]' : 'bg-white text-slate-400 border-slate-200'}`}>
+          <button onClick={() => navigate('DASHBOARD')} className={`px-8 py-3 rounded-xl font-black uppercase transition-all shadow-sm border-b-4 ${view === 'DASHBOARD' ? 'bg-[#C5A021] text-white border-[#9e801a]' : 'bg-white text-slate-400 border-slate-200'}`}>
             <i className="fa-solid fa-desktop mr-2"></i> Painel
           </button>
-          <button onClick={() => setView('REPORTS')} className={`px-8 py-3 rounded-xl font-black uppercase transition-all shadow-sm border-b-4 ${view === 'REPORTS' ? 'bg-[#C5A021] text-white border-[#9e801a]' : 'bg-white text-slate-400 border-slate-200'}`}>
+          <button onClick={() => navigate('REPORTS')} className={`px-8 py-3 rounded-xl font-black uppercase transition-all shadow-sm border-b-4 ${view === 'REPORTS' ? 'bg-[#C5A021] text-white border-[#9e801a]' : 'bg-white text-slate-400 border-slate-200'}`}>
             <i className="fa-solid fa-chart-simple mr-2"></i> Dados
           </button>
         </div>
@@ -276,9 +281,10 @@ const App: React.FC = () => {
           </div>
         )}
         {view === 'WIZARD' && (
-          <OrderWizard comanda={activeComanda || '000'} onCancel={() => { setView('DASHBOARD'); setActiveComanda(null); setIsComandaInvalid(false); }} onFinish={createOrder} />
+          <OrderWizard comanda={activeComanda || '000'} initialObservation={draftObservation} onCancel={() => navigate('DASHBOARD')}
+            onDraftChange={onDraftChange} onSavingChange={onSavingChange} onFinish={createOrder} />
         )}
-        {view === 'REPORTS' && <Reports orders={orders} onClose={() => setView('DASHBOARD')} />}
+        {view === 'REPORTS' && <Reports onClose={() => setView('DASHBOARD')} />}
         {view === 'SETTINGS' && <Settings config={printerConfig} onSave={setPrinterConfig} onClose={() => setView('DASHBOARD')} />}
       </main>
     </div>
