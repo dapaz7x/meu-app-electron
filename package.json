@@ -1,7 +1,7 @@
 {
   "name": "gestor-de-chapa-padaria-araujo",
   "private": true,
-  "version": "1.0.21",
+  "version": "1.0.22",
   "main": "main.js",
   "scripts": {
     "dev": "vite",
@@ -35,6 +35,7 @@
     "productName": "Gestor de Chapa",
     "files": [
       "dist/**/*",
+      "assets/araujo.ico",
       "main.js",
       "preload.js",
       "reports.cjs",
@@ -56,6 +57,7 @@
       }
     ],
     "win": {
+      "icon": "assets/araujo.ico",
       "target": "nsis"
     }
   }

@@ -344,6 +344,7 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 1200,
     height: 800,
+    icon: path.join(__dirname, "assets", "araujo.ico"),
     show: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
@@ -719,6 +720,7 @@ autoUpdater.on("download-progress", progress => {
 });
 
 app.whenReady().then(() => {
+  if (process.platform === "win32") app.setAppUserModelId("com.renan.gestorchapa");
   try {
     updatedReportStore();
   } catch (error) {

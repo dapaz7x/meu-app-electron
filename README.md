@@ -61,3 +61,5 @@ Os testes de interface usam Chrome no Windows. Para usar o Chromium do Playwrigh
 O workflow `checks.yml` verifica TypeScript, testes, build e interface sem publicar. O workflow `release.yml` publica apenas quando uma tag `v*` é enviada, exige a mesma versão na tag, no `package.json` e no `package-lock.json`, e repete as validações antes de gerar o instalador. Commits comuns não publicam releases. Para validar localmente sem publicar, use `npx electron-builder --win --x64 --publish never`.
 
 A versão 1.0.21 reúne o lançamento rápido de quantidades, a observação geral da comanda e os relatórios semanais com cancelamento auditável. Atualize os dois PCs para que principal e secundário tenham as mesmas funcionalidades.
+
+A versão 1.0.22 aplica o ícone da Araújo ao aplicativo e ao instalador do Windows. `assets/araujo.ico` é o arquivo original da cópia local do Araújo Encomendas, com resoluções de 16 a 256 pixels. O `appId` permanece `com.renan.gestorchapa`.
