@@ -48,3 +48,21 @@ test('impressão pelo navegador mostra observação única como texto, inclusive
   assert.match(element.innerHTML, /&lt;IMG SRC=X&gt; &amp; MESA 2/);
   assert.doesNotMatch(element.innerHTML, /<IMG/);
 });
+
+test('itens livres imprimem nome e quantidade por USB e escapam o nome no cupom HTML', t => {
+  const freeOrder: Order = { ...order, entries: [{ id: 'free-entry', addedAt: 1,
+    item: { id: 'livre-test', name: 'Quiche <tomate> & queijo', category: 'LIVRE', icon: '' },
+    quantity: 2, configs: repeatConfig(emptyConfig(), 2) }] };
+  const payloads: any[] = [];
+  mockGlobal(t, 'window', { electronAPI: { printReceipt: async (payload: any) => { payloads.push(payload); } } });
+  PrinterService.printOrder(freeOrder, { ...printer, mode: 'usb' });
+  assert.equal(payloads[0].printerMode, 'usb');
+  assert.match(Buffer.from(payloads[0].rawData, 'base64').toString('ascii'), /2X QUICHE <TOMATE> & QUEIJO/);
+
+  const element = { className: '', innerHTML: '', remove() {} };
+  (globalThis as any).window = { print() {} };
+  mockGlobal(t, 'document', { createElement: () => element, body: { appendChild() {} } });
+  PrinterService.printOrder(freeOrder, printer);
+  assert.match(element.innerHTML, /Quiche &lt;tomate&gt; &amp; queijo/);
+  assert.doesNotMatch(element.innerHTML, /<tomate>/);
+});

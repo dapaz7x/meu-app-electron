@@ -117,15 +117,30 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, initialObservation =
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [freeItemsOpen, setFreeItemsOpen] = useState(false);
+  const [freeName, setFreeName] = useState('');
+  const [freeQuantity, setFreeQuantity] = useState('1');
+  const freeNameInput = useRef<HTMLInputElement>(null);
   const submitting = useRef(false);
   const selected = byName(Object.values(lines).filter(line => line.quantity > 0).map(line => ({ ...line, name: line.item.name })));
   const total = selected.reduce((sum, line) => sum + line.quantity, 0);
-  const dirty = total > 0 || observation !== initialObservation;
+  const dirty = total > 0 || Boolean(freeName.trim()) || observation !== initialObservation;
   const items = byName(MENU_ITEMS).filter(item => (!selectedOnly || lines[item.id]?.quantity > 0)
     && searchText(item.name).includes(searchText(search.trim())));
 
   useEffect(() => { onDraftChange(dirty); }, [dirty, onDraftChange]);
   useEffect(() => () => { onDraftChange(false); onSavingChange(false); }, [onDraftChange, onSavingChange]);
+  useEffect(() => { if (freeItemsOpen) freeNameInput.current?.focus(); }, [freeItemsOpen]);
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.key !== 'F2' || saving || detailsId) return;
+      event.preventDefault();
+      setFreeItemsOpen(true);
+      freeNameInput.current?.focus();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [saving, detailsId]);
 
   function lineFor(item: MenuItem): DraftLine {
     return lines[item.id] || { item, quantity: 0, configs: [], individual: false };
@@ -139,8 +154,29 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, initialObservation =
     setDetailsId(item.id);
   }
 
+  function addFreeItem(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (saving) return;
+    const name = freeName.trim().replace(/\s+/g, ' ');
+    const quantity = Number(freeQuantity);
+    if (!name || name.length > 120 || !Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QUANTITY) {
+      setError('Informe o nome do item e uma quantidade inteira de 1 a 99.');
+      return;
+    }
+    const item: MenuItem = { id: `livre-${crypto.randomUUID()}`, name, category: 'LIVRE', icon: 'fa-solid fa-pen-to-square' };
+    updateLine({ item, quantity, configs: repeatConfig(emptyConfig(), quantity), individual: false });
+    setFreeName('');
+    setFreeQuantity('1');
+    freeNameInput.current?.focus();
+  }
+
   async function finish() {
     if (!total || submitting.current) return;
+    if (freeName.trim()) {
+      setError('Adicione o item livre digitado ou limpe o nome antes de enviar a comanda.');
+      freeNameInput.current?.focus();
+      return;
+    }
     const missing = selected.find(line => line.item.category === 'PASTEL' && line.configs.some(config => !config.flavor));
     if (missing) {
       setDetailsId(missing.item.id);
@@ -166,9 +202,26 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, initialObservation =
     <div className="flex flex-wrap items-center justify-between gap-3 bg-white border-b-2 border-slate-100 p-4">
       <button disabled={saving} onClick={onCancel} className="px-5 py-3 bg-slate-900 text-white rounded-xl font-black disabled:opacity-40">Voltar ao painel</button>
       <p className="font-black text-slate-600">Comanda {comanda} • Selecione os produtos e envie juntos</p>
+      <button disabled={saving} onClick={() => { setFreeItemsOpen(true); freeNameInput.current?.focus(); }}
+        aria-expanded={freeItemsOpen} aria-controls="free-items" className="px-5 py-3 rounded-xl bg-[#E53935] text-white font-black disabled:opacity-40">Itens livres (F2)</button>
     </div>
     <fieldset disabled={saving} className="flex-1 min-h-0 min-w-0 overflow-y-auto lg:overflow-hidden flex flex-col lg:flex-row">
       <div className="flex-1 min-w-0 lg:overflow-y-auto p-4 custom-scrollbar">
+        {freeItemsOpen && <form id="free-items" onSubmit={addFreeItem} className="mb-4 p-4 rounded-2xl border-2 border-[#C5A021] bg-amber-50">
+          <h2 className="text-xl font-black text-slate-900">Itens livres • funciona sem internet</h2>
+          <p className="text-sm text-slate-600 mt-1 mb-3">Digite qualquer produto. Depois de adicionar, o campo fica aberto para o próximo.</p>
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex-1 min-w-0 basis-48"><label htmlFor="free-item-name" className="block font-bold mb-1">Nome do item livre</label>
+              <input id="free-item-name" ref={freeNameInput} value={freeName} maxLength={120} required autoComplete="off"
+                onChange={event => setFreeName(event.target.value)} placeholder="Ex.: Coca-Cola 2L, quiche, mini salgado"
+                className="w-full p-3 rounded-xl border-2 border-slate-200 focus:outline-none focus:border-[#E53935]" /></div>
+            <div><label htmlFor="free-item-quantity" className="block font-bold mb-1">Quantidade do item livre</label>
+              <input id="free-item-quantity" type="number" inputMode="numeric" min={1} max={MAX_QUANTITY} step={1} required value={freeQuantity}
+                onFocus={event => event.target.select()} onChange={event => setFreeQuantity(event.target.value)}
+                className="w-24 p-3 rounded-xl border-2 border-slate-200 font-black focus:outline-none focus:border-[#E53935]" /></div>
+            <button type="submit" className="px-5 py-3 rounded-xl bg-[#E53935] text-white font-black">Adicionar item livre</button>
+          </div>
+        </form>}
         <div className="flex gap-3 mb-4 items-center sticky top-0 bg-slate-50 py-2 z-10">
           <div className="relative flex-1"><input aria-label="Buscar produto" value={search} onChange={event => setSearch(event.target.value)} placeholder="Buscar produto…"
             className="w-full p-3 pr-12 rounded-xl border-2 border-slate-200 focus:outline-none focus:border-[#E53935]" />
@@ -204,8 +257,10 @@ const OrderWizard: React.FC<OrderWizardProps> = ({ comanda, initialObservation =
         <div className="space-y-3 lg:flex-1 lg:min-h-0 lg:overflow-y-auto custom-scrollbar">
           {!selected.length && <p className="text-slate-400 py-3">Use + abaixo do produto ou toque no nome para adicionar.</p>}
           {selected.map(line => <div key={line.item.id} className="flex items-start gap-2 border-b border-slate-100 pb-3">
-            <button onClick={() => openDetails(line.item)} className="flex-1 text-left"><span className="font-black">{line.quantity}× {line.item.name}</span>
-              <span className="block text-xs text-slate-500 mt-1">{line.item.category === 'PASTEL' && line.configs.some(config => !config.flavor) ? 'Falta escolher sabores' : 'Toque para ajustar os detalhes'}</span></button>
+            {line.item.category === 'LIVRE' ? <div className="flex-1 min-w-0"><span className="font-black break-words">{line.quantity}× {line.item.name}</span>
+              <div className="mt-2"><QuantityControl name={line.item.name} value={line.quantity} onChange={value => updateLine(resizeLine(line, value))} /></div>
+            </div> : <button onClick={() => openDetails(line.item)} className="flex-1 min-w-0 text-left"><span className="font-black break-words">{line.quantity}× {line.item.name}</span>
+              <span className="block text-xs text-slate-500 mt-1">{line.item.category === 'PASTEL' && line.configs.some(config => !config.flavor) ? 'Falta escolher sabores' : 'Toque para ajustar os detalhes'}</span></button>}
             <button aria-label={`Remover ${line.item.name}`} onClick={() => updateLine(resizeLine(line, 0))} className="w-10 h-10 rounded-lg text-slate-500 hover:bg-red-50 hover:text-red-700 text-2xl">×</button>
           </div>)}
         </div>

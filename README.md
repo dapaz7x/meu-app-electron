@@ -15,6 +15,14 @@ Informe a comanda e ajuste a quantidade **logo abaixo de cada produto**, pelos b
 - A observação geral fica em `Order.observation`; cada lançamento guarda `orderObservation` para preservar a informação original no histórico semanal mesmo se a observação mudar depois.
 - Produtos, adicionais e sabores aparecem em ordem alfabética na seleção. Os dados originais e IDs não são reordenados nem modificados.
 
+## Itens livres sem internet
+
+Abra a comanda e pressione **F2** ou clique em **Itens livres (F2)**. Digite o nome do produto (por exemplo, Coca-Cola 2L, quiche ou mini salgado), informe a quantidade de 1 a 99 e pressione **Enter** ou **Adicionar item livre**. O campo permanece aberto para o próximo produto.
+
+Os itens livres aparecem no resumo junto dos produtos da chapa. Ajuste as quantidades ou remova itens antes de enviar. A confirmação salva a comanda e imprime um único cupom com os itens deste lançamento; reabrir a mesma comanda permite novos acréscimos. Se ainda houver um nome digitado sem adicionar, o envio pede que você o adicione ou limpe primeiro.
+
+O aplicativo inclui os estilos e ícones para abrir sem internet. Impressão USB e pela rede local não precisam de internet; no modo secundário, a conexão local com o PC principal continua necessária.
+
 ## Relatórios e cancelamentos
 
 Abra **Dados** ou pressione **F1**. O painel mostra a semana completa (segunda a domingo, fuso de São Paulo), com opção de ver somente **Hoje** ou escolher semanas anteriores.
@@ -44,7 +52,7 @@ Em modo **principal/secundário**, os TXT e cancelamentos ficam no principal, e 
 - F1: relatórios.
 - Ctrl + Shift + F12: painel administrativo.
 - Escape: voltar ao painel.
-- F2: permanece sem ação administrativa.
+- F2: abrir itens livres dentro da comanda.
 
 ## Verificação local
 
@@ -63,3 +71,5 @@ O workflow `checks.yml` verifica TypeScript, testes, build e interface sem publi
 A versão 1.0.21 reúne o lançamento rápido de quantidades, a observação geral da comanda e os relatórios semanais com cancelamento auditável. Atualize os dois PCs para que principal e secundário tenham as mesmas funcionalidades.
 
 A versão 1.0.22 aplica o ícone da Araújo ao aplicativo e ao instalador do Windows. `assets/araujo.ico` é o arquivo original da cópia local do Araújo Encomendas, com resoluções de 16 a 256 pixels. O `appId` permanece `com.renan.gestorchapa`.
+
+A versão 1.0.23 adiciona itens livres pelo atalho F2, com nome e quantidade, para incluir produtos fora do cardápio no mesmo lançamento e cupom. Os estilos e ícones passam a acompanhar o aplicativo para a tela abrir sem internet.

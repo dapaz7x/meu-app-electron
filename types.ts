@@ -9,7 +9,7 @@ export enum OrderStatus {
 export interface MenuItem {
   id: string;
   name: string;
-  category: 'LANCHE' | 'BURGER' | 'TAPIOCA' | 'CREPIOCA' | 'PASTEL';
+  category: 'LANCHE' | 'BURGER' | 'TAPIOCA' | 'CREPIOCA' | 'PASTEL' | 'LIVRE';
   icon: string;
 }
 

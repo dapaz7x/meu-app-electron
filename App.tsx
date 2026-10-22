@@ -277,6 +277,7 @@ const App: React.FC = () => {
                 </div>
               </div>
             </form>
+            <p className="text-center text-sm font-bold text-slate-500 -mt-6 mb-4">Abra a comanda e pressione F2 para digitar itens livres, mesmo sem internet.</p>
             <Dashboard orders={orders.filter(o => o.status !== OrderStatus.FINISHED)} onUpdateStatus={updateOrderStatus} />
           </div>
         )}
